@@ -1,0 +1,35 @@
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: root
+    password: root
+    url: jdbc:mysql://192.168.1.35:3307/vcs?allowPublicKeyRetrieval=true&useSSL=false&useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Taipei
+  cloud:
+    openfeign:
+      okhttp:
+        enabled: true
+mybatis-plus:
+  type-aliases-package: com.tkb
+  global-config:
+    db-config:
+      id-type: auto
+  configuration:
+    map-underscore-to-camel-case: true
+logging:
+  level:
+    root: INFO
+    com.tkb: DEBUG
+    com.baomidou.mybatisplus.core.mapper: DEBUG # MyBatis-Plus 映射層
+    org.apache.ibatis: DEBUG # 原始 MyBatis 套件
+    org.springframework.jdbc: DEBUG # Spring JDBC 相關操作
+
+gitlab:
+  url: "http://192.168.1.35/api/v4"
+  token: "glpat-G75sRdgD5fU7PvZaglUZmG86MQp1OnkH.01.0w1y0rl8x"
+  projects:
+    - name: test
+      id: 40857903
+    - name: tkbgo-api
+      id: 13
+    - name: tkbtv
+      id: 3

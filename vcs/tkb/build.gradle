@@ -1,0 +1,59 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.5.2'
+    id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.tkb'
+version = '0.0.1-SNAPSHOT'
+description = 'tkb'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation('org.springframework.boot:spring-boot-starter-web')
+
+    // lombok 註解 ， 需加上 compileOnly 跟 annotationProcessor(編譯時執行註解處理器)
+    compileOnly("org.projectlombok:lombok")
+    annotationProcessor("org.projectlombok:lombok")
+
+    // mysql 驅動
+    runtimeOnly("mysql:mysql-connector-java:8.0.33")
+
+    // 確保有資料庫連線池 (如 HikariCP) 的 Starter
+    implementation('org.springframework.boot:spring-boot-starter-data-jdbc')
+
+    // mybaties
+    implementation("com.baomidou:mybatis-plus-boot-starter:3.5.7")
+    // 確保 mybatis-spring 版本相容 Spring Boot 3.x/Spring 6.x
+    implementation("org.mybatis:mybatis-spring:3.0.3")
+
+    // openfeign
+    implementation("org.springframework.cloud:spring-cloud-starter-openfeign:4.3.0")
+    // okhttp 支持連接池
+    implementation("com.squareup.okhttp3:okhttp:5.1.0")
+
+    // alibaba json 工具
+    implementation("com.alibaba:fastjson:2.0.53")
+
+    // jwt
+    implementation("io.jsonwebtoken:jjwt:0.9.1")
+    // 添加 JAXB API 依赖 (Java 9+ 需要)
+    implementation("javax.xml.bind:jaxb-api:2.3.1")
+
+    // 測試
+    testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
