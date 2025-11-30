@@ -1,4 +1,4 @@
-import request from "@/views/utils/request";
+import request from "@/utils/request";
 
 // 查詢員工列表數據 加上 {} 要用 return {} 才有返回值
 const queryEmpPage = (name, gender , begin , end ,page , pageSize) => 

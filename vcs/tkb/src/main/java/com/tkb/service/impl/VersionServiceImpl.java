@@ -4,7 +4,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.tkb.entity.GitlabMrEntity;
 import com.tkb.entity.VersionEntity;
 import com.tkb.mapper.VersionMapper;
-import com.tkb.result.Result;
+import com.tkb.utils.result.Result;
 import com.tkb.service.GitlabMrService;
 import com.tkb.service.VersionService;
 import lombok.RequiredArgsConstructor;

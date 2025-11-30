@@ -2,7 +2,7 @@ package com.tkb.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.tkb.entity.VersionEntity;
-import com.tkb.result.Result;
+import com.tkb.utils.result.Result;
 
 
 public interface VersionService extends IService<VersionEntity> {

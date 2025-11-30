@@ -2,17 +2,22 @@ package com.tkb.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.github.pagehelper.Page;
+import com.github.pagehelper.PageHelper;
 import com.tkb.api.gitlab.GitlabApiClient;
 import com.tkb.api.gitlab.dto.GitlabDto;
 import com.tkb.config.GitlabConfig;
 import com.tkb.entity.GitlabMrEntity;
 import com.tkb.mapper.GitlabMrMapper;
 import com.tkb.service.GitlabMrService;
+import com.tkb.vo.PageBean;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 
 @Slf4j
@@ -113,5 +118,24 @@ public class GitlabMrServiceImpl extends ServiceImpl<GitlabMrMapper, GitlabMrEnt
                 .eq(GitlabMrEntity::getProjectName, projectName)
                 .eq(GitlabMrEntity::getVersion, version) // 鎖定目標版本
                 .update();
+    }
+
+    @Override
+    public PageBean page(Integer page, Integer pageSize, String projectName, String state, LocalDate mrStartDate, LocalDate mrEndDate) {
+
+
+        PageHelper.startPage(page, pageSize);
+
+        List<GitlabMrEntity> list = this.lambdaQuery()
+                .like(projectName != null && !projectName.isEmpty(), GitlabMrEntity::getProjectName, projectName)
+                .eq(state != null && !state.isEmpty(), GitlabMrEntity::getState, state)
+                .between(mrStartDate != null && mrEndDate != null, GitlabMrEntity::getMergedAt, mrStartDate, mrEndDate)
+                .orderByDesc(GitlabMrEntity::getMergedAt) // 依照合併時間排序
+                .list();
+
+        Page<GitlabMrEntity> pageList = (Page<GitlabMrEntity>) list;
+
+        return new PageBean(pageList.getTotal(), pageList.getResult());
+
     }
 }

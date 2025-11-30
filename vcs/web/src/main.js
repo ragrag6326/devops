@@ -7,6 +7,12 @@ import zhtw from 'element-plus/es/locale/lang/zh-tw'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 
 
+import '@/assets/style/theme-color.css'
+
+import '@/assets/style/el-dialog.css'
+import '@/assets/style/el-message.css'
+
+
 import App from './App.vue'
 
 

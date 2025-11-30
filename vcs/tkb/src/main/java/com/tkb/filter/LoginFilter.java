@@ -1,7 +1,8 @@
 package com.tkb.filter;
 
 
-import com.tkb.result.Result;
+import com.tkb.utils.JwtUtils;
+import com.tkb.utils.result.Result;
 import jakarta.servlet.*;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -27,32 +28,29 @@ public class LoginFilter implements Filter {
 
         // 2. 獲取請求頭中的 Token
         String jwt = req.getHeader("token");
+
         System.out.println(jwt);
 
         // 3. 判斷 token 是否存在 不存在返回錯誤結果 (未登入)
         if (!StringUtils.hasLength(jwt)){
-            log.info("request header \"token\" is empty");
-            Result error = Result.error("NOT_LOGIN");
-            // 手動轉換 對象-- json  --> fastJson
-            String notLogin = JSONObject.toJSONString(error);
-            res.getWriter().write(notLogin);
+            log.warn("未帶 token");
+            res.setStatus(401);
+            res.getWriter().write(JSONObject.toJSONString(Result.error("NOT_LOGIN")));
             return;
         }
 
         // 4. 解析 token 如果解析失敗 返回錯誤結果
         try {
-            jwt.parseJWT(jwt);
+            JwtUtils.parseJWT(jwt);
         } catch (Exception e) { // jwt 解析失敗
-            log.info("解析 token 失敗 ，返回未登入錯誤訊息");
-            Result error = Result.error("NOT_LOGIN");
-            // 手動轉換 對象-- json  --> fastJson
-            String notLogin = JSONObject.toJSONString(error);
-            res.getWriter().write(notLogin);
+            log.warn("token 解析或驗證失敗: {}", e.getMessage());
+            res.setStatus(401);
+            res.getWriter().write(JSONObject.toJSONString(Result.error("TOKEN_INVALID")));
             return;
         }
 
         // 5. 放行
-        log.info("token 合法 ，放行操作");
+        log.debug("token 通過驗證");
         Chain.doFilter(request, response);
 
     }

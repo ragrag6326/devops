@@ -1,7 +1,7 @@
 package com.tkb.controller;
 
 import com.tkb.entity.UserEntity;
-import com.tkb.result.Result;
+import com.tkb.utils.result.Result;
 import com.tkb.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,11 +19,15 @@ public class LoginController {
 
     @PostMapping("/login")
     public Result login(@RequestBody UserEntity user) {
-        log.info("員工登入信息 : {}" , user);
+        log.info("/login 用戶: {} , 嘗試登入" , user.getUsername());
 
-        UserEntity e = userService.login(user);
+        String authUser = userService.login(user);
+
+        if (authUser == null) {
+            return Result.error("登入失敗");
+        }
 
         // 登入成功 生成JWT 下發令牌
-
+        return Result.success(authUser);
     }
 }

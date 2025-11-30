@@ -1,16 +1,19 @@
 package com.tkb.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.github.pagehelper.Page;
+import com.github.pagehelper.PageHelper;
 import com.tkb.entity.UserEntity;
 import com.tkb.mapper.UserMapper;
-import com.tkb.result.Result;
 import com.tkb.service.UserService;
 import com.tkb.utils.JwtUtils;
+import com.tkb.vo.PageBean;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -19,22 +22,36 @@ import java.util.Map;
 public class UserServiceImpl extends ServiceImpl<UserMapper, UserEntity> implements UserService {
 
     @Override
-    public Result login(UserEntity user) {
-        UserEntity User = this.lambdaQuery()
+    public String login(UserEntity user) {
+        UserEntity authUser = this.lambdaQuery()
                 .eq(UserEntity::getUsername, user.getUsername())
                 .eq(UserEntity::getPassword, user.getPassword())
                 .one();
 
-        if (User != null) {
+        if (authUser != null) {
             Map<String, Object> map = new HashMap<>();
-            map.put("id", User.getId());
-            map.put("name", User.getName());
-            map.put("username", User.getUsername());
+            map.put("id", authUser.getId());
+            map.put("name", authUser.getName());
+            map.put("username", authUser.getUsername());
 
             String jwt = JwtUtils.generateJWT(map); // jwt 包含當前員工登入的訊息
-            return Result.success(jwt);
+            return jwt;
         }
 
-        return Result.error("登入失敗");
+        return "未找到" + user.getUsername() + "該用戶";
+    }
+
+    @Override
+    public PageBean page(Integer page, Integer pageSize, String name) {
+        PageHelper.startPage(page, pageSize);
+
+        List<UserEntity> list = this.lambdaQuery()
+                .like(UserEntity::getUsername, name)
+                .list();
+
+        Page<UserEntity> pageList = (Page<UserEntity>) list;
+
+        // 3. 封裝 pageBean 對象
+        return new PageBean(pageList.getTotal(), pageList.getResult());
     }
 }

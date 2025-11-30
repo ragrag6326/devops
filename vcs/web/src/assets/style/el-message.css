@@ -1,0 +1,96 @@
+/* --- 覆蓋 ElMessage 全局提示樣式 --- */
+
+/* 針對所有 ElMessage 類型 */
+.el-message {
+    /* 玻璃擬態效果 */
+    background: rgba(30, 41, 59, 0.9) !important; /* 使用深色背景，提高透明度 */
+    backdrop-filter: blur(10px) !important;
+    -webkit-backdrop-filter: blur(10px) !important;
+    
+    /* 邊框和陰影 */
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4) !important;
+    
+    /* 文字和圖標顏色 */
+    color: var(--text-main, #f1f5f9) !important;
+    padding: 12px 20px 12px 15px !important;
+}
+
+/* 確保內部 icon 和文字顏色正確 */
+.el-message__content {
+    color: var(--text-main, #f1f5f9) !important;
+}
+
+/* 調整特定類型提示的圖標顏色 */
+.el-message--success .el-icon {
+    color: #4ade80 !important; /* Green */
+}
+.el-message--warning .el-icon {
+    color: #fbbf24 !important; /* Amber */
+}
+.el-message--error .el-icon {
+    color: #f87171 !important; /* Red */
+}
+.el-message--info .el-icon {
+    color: #60a5fa !important; /* Blue */
+}
+
+/* --- ElMessageBox 登出確認框 (Logout Confirm Box) 樣式覆蓋 --- */
+
+/* 1. 針對自定義類名 'glass-confirm' 應用玻璃擬態背景 */
+.glass-confirm {
+    /* 核心玻璃效果 */
+    background: rgba(30, 41, 59, 0.95) !important; /* 使用深色背景 */
+    backdrop-filter: blur(15px) !important;
+    -webkit-backdrop-filter: blur(15px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+    border-radius: 16px !important;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6) !important;
+    
+    color: var(--text-main, #f1f5f9) !important;
+    width: 400px; /* 控制訊息框寬度 */
+}
+
+/* 2. 調整標題和內容文字顏色 */
+.glass-confirm .el-message-box__header {
+    background: transparent !important;
+}
+
+.glass-confirm .el-message-box__title {
+    color: var(--text-main, #f1f5f9) !important;
+    font-weight: 600;
+}
+
+.glass-confirm .el-message-box__content {
+    color: var(--text-sub, #94a3b8) !important;
+}
+
+/* 3. 確認按鈕 (Primary Button - 確認登出) */
+.glass-confirm .el-button--primary {
+    /* 使用您的主色調漸層樣式 (與登入按鈕一致) */
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%) !important;
+    border: none !important;
+    color: #fff !important;
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.5) !important;
+    font-weight: 600 !important;
+}
+.glass-confirm .el-button--primary:hover {
+    transform: translateY(-1px);
+    opacity: 0.9;
+}
+
+/* 4. 取消按鈕 (Default/Info Button - 取消) */
+.glass-confirm .el-button--default,
+.glass-confirm .el-button--info {
+    /* 使用玻璃按鈕樣式 */
+    background: rgba(255, 255, 255, 0.1) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    color: var(--text-main, #f1f5f9) !important;
+    font-weight: 500 !important;
+}
+.glass-confirm .el-button--default:hover,
+.glass-confirm .el-button--info:hover {
+    background: rgba(255, 255, 255, 0.2) !important;
+    border-color: rgba(255, 255, 255, 0.3) !important;
+}

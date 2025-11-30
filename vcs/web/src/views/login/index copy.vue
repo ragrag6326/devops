@@ -104,7 +104,7 @@ const handleClear = () => {
 
             <div class="login-footer">
                 © 2025 版本控制管理系統 - 🤖 版權所有
-            </div>
+             </div>
         </div>
     </body>
 </template>
@@ -149,31 +149,22 @@ body::before {
 
 .login-container {
     width: 400px;
-    z-index: 10;
-    
-    /* 這裡不再使用傳統白色背景，讓內容由內部的 .el-form 承載玻璃效果 */
-    background: rgba(0, 0, 0, 0.3); /* 輕微深色疊加，增加層次感 */
-    border-radius: 24px;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-    padding: 0; /* 讓 el-form 內部控制內邊距 */
+    padding: 30px;
+    /* 背景色可以稍微調整透明度，讓背景圖若隱若現 */
+    background-color: rgba(255, 255, 255, 0.95); 
+    border-radius: 8px;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+    z-index: 1; /* 確保登入框在疊加層上方 */
 }
 
 .login-header {
     text-align: center;
-    padding: 30px 30px 10px 30px; /* 調整內邊距 */
+    margin-bottom: 30px;
 }
+
 .login-header h2 {
-    font-size: 26px;
-    font-weight: 700;
-    /* 標題漸層 */
-    background: linear-gradient(to right, #fff, #cbd5e1);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    margin-bottom: 5px;
-}
-.login-header p {
-    color: var(--text-sub);
-    font-size: 14px;
+    color: #333;
+    font-size: 24px;
 }
 
 .login-footer {
@@ -184,46 +175,53 @@ body::before {
 }
 
 
+/* =============================== */
+/* el-form  樣式                   */
+/* =============================== */
 
-/* --- Element Plus 表單/輸入框樣式覆蓋  --- */
+/* --- 登入表單專用樣式 --- */
+
 /* 1. 調整整個表單容器的外觀 */
 .el-form {
     padding: 30px;
-    /* 玻璃效果應用在表單本身 */
-    background: var(--glass-bg) !important; 
-    backdrop-filter: blur(12px) !important;
-    border-top: 1px solid var(--glass-border) !important; /* 視覺區隔 */
-    border-radius: 0 0 24px 24px; /* 只有底部圓角 */
+    background: rgba(30, 41, 59, 0.7); /* 較高的透明度，讓背景透出 */
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
 }
 
-/* 2. 輸入框整體樣式 (Input Wrapper) */
+/* 2. 覆蓋輸入框 (el-input) 的外觀 */
 :deep(.el-input__wrapper) {
+    /* 背景設置為透明或極深的半透明 */
     background-color: rgba(0, 0, 0, 0.2) !important; 
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15) inset !important; 
-    border-radius: 12px !important; 
-    padding: 10px 15px !important; 
-    transition: all 0.3s ease;
+    
+    /* 邊框使用極淡的白色，作為玻璃邊緣 */
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1) inset !important; 
+    
+    border-radius: 12px !important; /* 圓角化 */
+    padding: 10px 15px !important; /* 增加內邊距，使輸入框更高 */
 }
 
-/* 3. 輸入框聚焦 (Focus) 時的樣式 */
-:deep(.el-input__wrapper.is-focus) {
-    box-shadow: 0 0 0 2px var(--primary-color, #6366f1) inset, 
-                0 0 15px rgba(8, 11, 228, 0.4) !important; 
-}
-
-/* 4. 調整輸入框內的文字和圖標顏色 */
+/* 3. 調整輸入框內的文字和圖標顏色 */
 :deep(.el-input__inner) {
-    color: var(--text-main, #f4f1f9) !important; /* 文字顏色為淺色 */
+    color: var(--text-main, #f1f5f9) !important; /* 文字顏色為淺色 */
     font-size: 16px !important;
 }
 
-/* 5. 調整輸入框的 Icon 顏色 */
+/* 4. 調整輸入框的 Icon 顏色 */
 :deep(.el-input__prefix) {
     color: var(--text-sub, #94a3b8) !important; /* 圖標顏色為柔和的灰色 */
-    font-size: 28px;
-    margin-right: 15px; /* 調整圖標與文字的間距 */
+    font-size: 18px;
+    margin-right: 8px; /* 調整圖標與文字的間距 */
 }
 
+/* 5. 輸入框聚焦 (Focus) 時的樣式 */
+:deep(.el-input__wrapper.is-focus) {
+    /* 聚焦時，邊框變為品牌色 (Primary Color) 的微光 */
+    box-shadow: 0 0 0 1px var(--primary-color, #6366f1) inset, 
+                0 0 10px rgba(99, 102, 241, 0.3) !important; 
+}
 
 /* 6. 按鈕樣式 (使用前一輪定義的漸層風格) */
 
@@ -231,12 +229,16 @@ body::before {
 :deep(.el-button--primary) {
     background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%) !important;
     border: none !important;
+    color: #fff !important;
     box-shadow: 0 4px 14px 0 rgba(99, 102, 241, 0.39) !important;
     font-weight: 600;
-    height: 48px; 
+    transition: all 0.3s ease !important;
+    height: 48px; /* 增加高度 */
 }
-:deep(.el-button--primary:hover) { transform: translateY(4px); opacity: 0.8; }
-
+:deep(.el-button--primary:hover) {
+    transform: translateY(-1px);
+    opacity: 0.9;
+}
 
 /* 清除按鈕 (Info - 玻璃風格) */
 :deep(.el-button--info) {
@@ -246,18 +248,43 @@ body::before {
     transition: all 0.3s ease !important;
     height: 48px;
 }
-
 :deep(.el-button--info:hover) {
     background: rgba(255, 255, 255, 0.2) !important;
-    transform: translateY(4px); opacity: 0.8;
 }
 
-/* --- 頁面底部 --- */
-.login-footer {
-    padding: 0px 0px;
-    font-size: 15px;
-    color: rgba(255, 255, 255, 0.999);
+
+/* =============================== */
+/* 按鈕樣式加強 (如果全局沒生效) */
+/* =============================== */
+
+/* 主按鈕 (新增/編輯) */
+:deep(.el-button--primary) {
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    border: none;
+    box-shadow: 0 2px 6px rgba(99, 102, 241, 0.4);
+    color: white;
+}
+:deep(.el-button--primary:hover) {
+    opacity: 0.9;
+    transform: translateY(-1px);
 }
 
+/* 危險按鈕 (刪除) */
+:deep(.el-button--danger) {
+    background: linear-gradient(135deg, #ef4444 0%, #f87171 100%);
+    border: none;
+    box-shadow: 0 2px 6px rgba(239, 68, 68, 0.4);
+}
+:deep(.el-button--danger:hover) {
+    opacity: 0.9;
+    transform: translateY(-1px);
+}
+
+/* 表格內的小按鈕調整 */
+:deep(.el-table .el-button) {
+    padding: 6px 12px;
+    height: auto;
+    font-size: 12px;
+}
 
 </style>

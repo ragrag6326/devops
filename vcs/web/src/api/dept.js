@@ -1,4 +1,4 @@
-import request from "@/views/utils/request";
+import request from "@/utils/request";
 
 // 查詢
 const queryDeptsApi = () => request.get('/depts')

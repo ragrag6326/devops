@@ -1,4 +1,4 @@
-package com.tkb.result;
+package com.tkb.utils.result;
 
 import lombok.Data;
 

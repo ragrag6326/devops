@@ -1,14 +1,10 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
 import HomeView from '../views/homepage/index.vue'
-import ClassView from '../views/clazz/index.vue'
-import DeptView from '../views/dept/index.vue'
-import EmpView from '../views/emp/index.vue'
-import LogView from '../views/log/index.vue'
+import VersionHistoryView from '../views/version/history/index.vue'
+import MRHistoryView from '../views/mr/history/index.vue'
+import UserListView from '../views/user/list/index.vue'
 import LoginView from '../views/login/index.vue'
-import EmpReportView from '../views/report/emp/index.vue'
-import stuReportView from '../views/report/stu/index.vue'
-import stuView from '../views/stu/index.vue'
 import LayoutView from '../views/layout/index.vue'
 
 
@@ -22,13 +18,9 @@ const router = createRouter({
       redirect:'/homepage',
       children:[
         {path: 'homepage',name: 'homepage',component: HomeView},
-        {path: 'clazz',name: 'clazz',component: ClassView},
-        {path: 'dept',name: 'dept',component: DeptView},
-        {path: 'emp',name: 'emp',component: EmpView},
-        {path: 'log',name: 'log',component: LogView},
-        {path: 'empReport',name: 'empreport',component: EmpReportView},
-        {path: 'stuReport',name:'stureport',component: stuReportView},
-        {path: 'stu',name:'stu',component: stuView},
+        {path: 'version/history',name: 'VersionHistory',component: VersionHistoryView , meta: { title: '版本歷史查詢' , keepAlive: true}},
+        {path: 'mr/history',name: 'MRHistory',component: MRHistoryView , meta: { title: 'MR歷史查詢' , keepAlive: true }},
+        {path: 'user/list',name: 'UserList',component: UserListView , meta: { title: '用戶查詢' , keepAlive: true }},
       ]
     },
 

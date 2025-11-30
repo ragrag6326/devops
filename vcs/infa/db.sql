@@ -3,59 +3,6 @@
 CREATE DATABASE IF NOT EXISTS `vcs` 
 USE `vcs`;
 
-CREATE TABLE project_versions (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT,
-    project_name VARCHAR(50) NOT NULL,
-    project_env  VARCHAR(50) NOT NULL COMMENT '部屬環境',
-    version VARCHAR(50) NOT NULL COMMENT '記錄版號:如 1.0.3',
-    created_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    updated_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-);
-
-
-
-
-
-CREATE TABLE gitlab_merge_requests (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT,
-    project_name VARCHAR(100) NOT NULL,
-    mr_iid BIGINT NOT NULL COMMENT 'GitLab MR IID',
-    title VARCHAR(255) NOT NULL,
-    description TEXT,
-    author VARCHAR(100),
-    source_branch VARCHAR(100),
-    target_branch VARCHAR(100),
-    merge_status VARCHAR(50),            -- opened / merged / closed
-    merged_time DATETIME,                -- MR 被 merged 的時間 (★ 查詢最關鍵)
-    web_url VARCHAR(255),
-    created_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-);
-
-
-
-
-CREATE TABLE gitlab_merge_requests (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT,
-    project_name VARCHAR(255) COMMENT "專案名稱",
-    mr_id BIGINT NOT NULL COMMENT "GitLab MR 的 id", 
-    iid INT NOT NULL COMMENT "專案內 MR 序號",  
-    title VARCHAR(255) COMMENT "MR標題",
-    description TEXT COMMENT "MR說明",
-    state VARCHAR(20) COMMENT "狀態 merged(完成MR) | opened(尚未MR) | closed(取消MR) ",
-    target_branch VARCHAR(100),
-    source_branch VARCHAR(100),
-    author_name VARCHAR(100),
-    merged_by VARCHAR(100),
-    merged_at DATETIME NULL,
-    created_at DATETIME NOT NULL,
-    updated_at DATETIME NOT NULL,
-    UNIQUE KEY uk_mr_id (mr_id)
-);
-
-
-
-
 
 -- vcs.project_versions definition
 
@@ -64,10 +11,17 @@ CREATE TABLE `project_versions` (
   `project_name` varchar(50) NOT NULL,
   `project_env` varchar(50) NOT NULL COMMENT '部屬環境',
   `version` varchar(50) NOT NULL COMMENT '記錄版號:如 1.0.3',
+  `state` tinyint DEFAULT NULL COMMENT '0=success , 1=rollback , 2=??',
   `created_time` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_time` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb3;
+) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8mb3;
+
+INSERT INTO vcs.project_versions (project_name,project_env,version,state,created_time,updated_time) VALUES
+	 ('tkbgoapi','dev','1.0.17',0,'2025-11-16 15:13:50','2025-11-28 07:52:42'),
+	 ('tkbgoapi','dev','1.0.18',0,'2025-11-28 16:15:45','2025-11-28 16:15:45'),
+	 ('tkbgo-api','dev','1.0.18',1,'2025-11-28 16:17:57','2025-11-28 08:23:30'),
+	 ('tkbgo-api','dev','1.0.18',0,'2025-11-28 16:24:22','2025-11-28 16:24:22');
 
 
 -- vcs.gitlab_merge_requests definition
@@ -75,6 +29,7 @@ CREATE TABLE `project_versions` (
 CREATE TABLE `gitlab_merge_requests` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `project_name` varchar(50) DEFAULT NULL COMMENT '專案名稱',
+  `version` varchar(50) DEFAULT NULL COMMENT '發布時所屬的版本號',
   `mr_id` bigint NOT NULL COMMENT 'GitLab MR 的 id',
   `iid` int NOT NULL COMMENT '專案內 MR 序號',
   `title` varchar(255) DEFAULT NULL COMMENT 'MR標題',
