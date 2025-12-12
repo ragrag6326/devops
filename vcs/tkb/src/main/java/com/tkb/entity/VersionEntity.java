@@ -20,9 +20,18 @@ public class VersionEntity {
 
     private String version;
 
+    /** 0=DEPLOYING, 1=SUCCESS, 2=FAILED, 3=ROLLED_BACK */
     private int state;
 
+    private String remark;
+
+    private String releaseNote;
+
+    private String createdBy;
+
     private LocalDateTime createdTime;
+
+    private LocalDateTime finishedTime;
 
     private LocalDateTime updatedTime;
 }

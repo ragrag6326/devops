@@ -15,7 +15,7 @@ import java.util.List;
 @Slf4j
 @RequiredArgsConstructor
 @RestController
-@RequestMapping("/gitlab")
+@RequestMapping("/api/gitlab")
 public class GitlabController {
 
     private final GitlabMrService gitlabMrService;

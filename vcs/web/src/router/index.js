@@ -11,20 +11,21 @@ import LayoutView from '../views/layout/index.vue'
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
+    // root 直接導到 login
+    { path: '/', redirect: '/login' },
 
     { path: '/', 
       name: '', 
       component: LayoutView ,
-      redirect:'/homepage',
       children:[
-        {path: 'homepage',name: 'homepage',component: HomeView},
-        {path: 'version/history',name: 'VersionHistory',component: VersionHistoryView , meta: { title: '版本歷史查詢' , keepAlive: true}},
-        {path: 'mr/history',name: 'MRHistory',component: MRHistoryView , meta: { title: 'MR歷史查詢' , keepAlive: true }},
-        {path: 'user/list',name: 'UserList',component: UserListView , meta: { title: '用戶查詢' , keepAlive: true }},
+        {path: '/homepage',name: 'homepage',component: HomeView},
+        {path: '/version/history',name: 'VersionHistory',component: VersionHistoryView , meta: { title: '版本歷史查詢' , keepAlive: true}},
+        {path: '/mr/history',name: 'MRHistory',component: MRHistoryView , meta: { title: 'MR歷史查詢' , keepAlive: true }},
+        {path: '/user/list',name: 'UserList',component: UserListView , meta: { title: '用戶查詢' , keepAlive: true }},
       ]
     },
 
-    { path: '/login',name: 'login',component: LoginView},
+    { path: '/login', name: 'login', component: LoginView },
   ]
 })
 

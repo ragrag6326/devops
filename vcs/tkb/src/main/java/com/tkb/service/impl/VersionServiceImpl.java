@@ -1,12 +1,17 @@
 package com.tkb.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.github.pagehelper.Page;
+import com.github.pagehelper.PageHelper;
 import com.tkb.entity.GitlabMrEntity;
 import com.tkb.entity.VersionEntity;
 import com.tkb.mapper.VersionMapper;
+import com.tkb.utils.Constant.DeployState;
+import com.tkb.utils.Version.VersionUtil;
 import com.tkb.utils.result.Result;
 import com.tkb.service.GitlabMrService;
 import com.tkb.service.VersionService;
+import com.tkb.vo.PageBean;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -24,7 +29,7 @@ public class VersionServiceImpl extends ServiceImpl<VersionMapper, VersionEntity
     private final GitlabMrService gitlabMrService;
 
     @Override
-    public Result<String> saveVersion(VersionEntity version) {
+    public Result<String> saveNewVersion(VersionEntity version) {
 
         // 1. 版本號定義
         if (version.getProjectName() == null || version.getProjectEnv() == null) {
@@ -57,6 +62,9 @@ public class VersionServiceImpl extends ServiceImpl<VersionMapper, VersionEntity
         VersionEntity result = this.lambdaQuery()
                 .eq(VersionEntity::getProjectName, ProjectName)
                 .eq(VersionEntity::getProjectEnv, ProjectEnv)
+                .eq(VersionEntity::getState, DeployState.SUCCESS.getCode()) // 1
+                .orderByDesc(VersionEntity::getVersion)
+                .last("LIMIT 1")
                 .one();
 
         if (result == null) {
@@ -69,17 +77,18 @@ public class VersionServiceImpl extends ServiceImpl<VersionMapper, VersionEntity
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Result<String> upgradeAndGenerateNote(VersionEntity versionRequest) {
+
         String projectName = versionRequest.getProjectName();
         String projectEnv = versionRequest.getProjectEnv(); // "dev" 或 "prod"
         String newVersion = versionRequest.getVersion();
         LocalDateTime now = LocalDateTime.now();
 
-        // 1. 找出同環境的，且(上一個版本更新成功的版本)
+        // 1. 找上一版 (成功的 dev/prod)
         // select * from project_versions where project_env = '?' and project_name = '?' and state = 0 order by created_time desc limit 1
         VersionEntity lastVersion = this.lambdaQuery()
                 .eq(VersionEntity::getProjectName, projectName)
                 .eq(VersionEntity::getProjectEnv, projectEnv) // prod / dev 但通常都是 dev
-                .eq(VersionEntity::getState, 0) // 0 = 成功
+                .eq(VersionEntity::getState, DeployState.SUCCESS.getCode()) // 1 = 成功
                 .orderByDesc(VersionEntity::getCreatedTime)
                 .last("LIMIT 1")
                 .one();
@@ -102,7 +111,6 @@ public class VersionServiceImpl extends ServiceImpl<VersionMapper, VersionEntity
             if (comparisonResult <= 0) {
                 return Result.error("新版本號 " + newVersion + " 必須大於現有最新版本號 " + currentVersionStr);
             }
-
         }
 
         // 3. 版本查詢的 startTime 如果查不到就將時間點往前推一個月  如 11/11 -> 10/11 查詢gitlab的MR時間
@@ -121,31 +129,15 @@ public class VersionServiceImpl extends ServiceImpl<VersionMapper, VersionEntity
         List<GitlabMrEntity> mergedMrs = gitlabMrService.getMergedMrsBetween(
                 projectName,
                 targetBranchToQuery, // 查看 develop
+                projectEnv,          // dev / prod
                 startTime,
                 now
         );
 
         log.info("查詢 MR : {} ", mergedMrs);
 
-        // 7. 存檔新版本
-        versionRequest.setCreatedTime(now);
-        versionRequest.setUpdatedTime(now);
-        versionRequest.setState(0); // 0 success
-        this.save(versionRequest);
 
-        // 8. MR 版標標記 (Stamping)
-        if (!mergedMrs.isEmpty()) {
-            // 取得所有 MR 實體在 DB 中的 ID
-            List<Long> mrIdsToStamp = mergedMrs.stream()
-                    .map(GitlabMrEntity::getId)
-                    .collect(Collectors.toList());
-
-            // 標記服務
-            // update <gitlab_merge_requests> set version = '??' where id in (1 ,2 ,3)
-            gitlabMrService.stampVersionForMrs(mrIdsToStamp, newVersion);
-        }
-
-        // 8. 生成 Note (加入環境標示)
+        // 7. 生成 Note (加入環境標示)
         StringBuilder note = new StringBuilder();
         note.append("## 🚀 ").append(projectEnv.toUpperCase()).append(" Release Note: ").append(newVersion).append("\n");
         note.append("**區間:** `").append(lastVersion != null ? lastVersion.getVersion() : "Initial").append("` -> `").append(newVersion).append("`\n");
@@ -159,6 +151,31 @@ public class VersionServiceImpl extends ServiceImpl<VersionMapper, VersionEntity
                 note.append(String.format("- %s (!%s) - @%s\n", mr.getTitle(), mr.getIid(), mr.getAuthorName()));
             }
         }
+
+        // 8. 更新已存在的 version row（ deploy/deploying 新建的）
+        boolean updated = this.lambdaUpdate()
+                .set(VersionEntity::getReleaseNote, note.toString())
+                .eq(VersionEntity::getProjectName, projectName)
+                .eq(VersionEntity::getProjectEnv, projectEnv)
+                .eq(VersionEntity::getVersion, newVersion)
+                .update();
+
+        if (!updated) {
+            return Result.error("找不到對應版本紀錄，請先呼叫 /deploy/deploying");
+        }
+
+        // 9. MR 版標標記 (Stamping)
+        if (!mergedMrs.isEmpty()) {
+            // 取得所有 MR 實體在 DB 中的 ID
+            List<Long> mrIdsToStamp = mergedMrs.stream()
+                    .map(GitlabMrEntity::getId)
+                    .collect(Collectors.toList());
+
+            // 標記服務
+            // update <gitlab_merge_requests> set version = '??' where id in (1 ,2 ,3)
+            gitlabMrService.stampVersionForMrs( projectName, projectEnv , mrIdsToStamp, newVersion);
+        }
+
 
         return Result.success(note.toString());
     }
@@ -179,9 +196,9 @@ public class VersionServiceImpl extends ServiceImpl<VersionMapper, VersionEntity
             return Result.error("版本號不可為空");
         }
 
-        //2. Version 表的 state 改成 1=rollback
+        //2. Version 表的 state 改成 3 = rollback
         boolean VersionUpdate = this.lambdaUpdate()
-                .set(VersionEntity::getState, 1)
+                .set(VersionEntity::getState, DeployState.ROLLED_BACK.getCode())
                 .eq(VersionEntity::getProjectName, projectName)
                 .eq(VersionEntity::getProjectEnv, projectEnv)
                 .eq(VersionEntity::getVersion, version)
@@ -193,10 +210,104 @@ public class VersionServiceImpl extends ServiceImpl<VersionMapper, VersionEntity
         }
 
         // 3. 將特定版本號的 MR表 的 version 欄位設為 NULL
-        gitlabMrService.unstampVersionForMrs(projectName, version);
+        gitlabMrService.unstampVersionForMrs(projectName, projectEnv , version);
 
         log.info("版本 RollBack 成功：版本紀錄 {}  MR 已解除標記。", version);
         return Result.error("版本 RollBack 成功：版本紀錄" + version + "MR 已解除標記。");
+    }
+
+    @Override
+    public PageBean page(Integer page, Integer pageSize, String name, String env, String state) {
+        PageHelper.startPage(page, pageSize);
+
+        List<VersionEntity> list = this.lambdaQuery()
+                .like(name != null && !name.isEmpty(), VersionEntity::getProjectName, name)
+                .eq(env != null && !env.isEmpty(), VersionEntity::getProjectEnv, env)
+                .eq(state != null && !state.isEmpty(), VersionEntity::getState, state)
+                .orderByDesc(VersionEntity::getCreatedTime)
+                .list();
+
+        Page<VersionEntity> pageList = (Page<VersionEntity>) list;
+
+        return new PageBean(pageList.getTotal() , pageList.getResult());
+
+    }
+
+    /**
+     * 查詢下一個版本
+     * @param projectName
+     * @param env
+     * @return
+     */
+    @Override
+    public String getNextVersion(String projectName, String env) {
+        VersionEntity lastVersion = this.lambdaQuery()
+                .eq(VersionEntity::getProjectName, projectName)
+                .eq(VersionEntity::getProjectEnv, env)
+                .orderByDesc(VersionEntity::getCreatedTime)
+                .last("LIMIT 1")
+                .one();
+
+        String newVersion = "undefined";
+
+        if (lastVersion != null) {
+            newVersion = VersionUtil.plusOne(lastVersion.getVersion());
+        }
+
+        return newVersion;
+
+    }
+
+    /**
+     * 取得 dev環境 最後一次成功的 版號
+     * @param projectName
+     * @param dev
+     * @return
+     */
+    @Override
+    public String getLastSuccessVersion(String projectName, String env) {
+
+        VersionEntity LastSuccessVersion = this.lambdaQuery()
+                .eq(VersionEntity::getProjectName, projectName)
+                .eq(VersionEntity::getProjectEnv, env)
+                .eq(VersionEntity::getState, DeployState.SUCCESS.getCode())
+                .orderByDesc(VersionEntity::getCreatedTime)
+                .last("LIMIT 1")
+                .one();
+
+        if ( LastSuccessVersion != null ) {
+            return LastSuccessVersion.getVersion();
+        }
+        return "null";
+    }
+
+    @Override
+    public String getReleaseNote(String projectName, String env) {
+        VersionEntity one = this.lambdaQuery()
+                .eq(VersionEntity::getProjectName, projectName)
+                .eq(VersionEntity::getProjectEnv, env)
+                .eq(VersionEntity::getState, DeployState.SUCCESS.getCode())
+                .orderByDesc(VersionEntity::getFinishedTime)
+                .last("LIMIT 1")
+                .one();
+        if (one != null) {
+            return one.getReleaseNote();
+        } else
+            return "RELEASE NOTE NOT FOUND";
+    }
+
+    /**
+     * 備註修改
+     * @param versionEntity
+     */
+    @Override
+    public Boolean editRemark(VersionEntity versionEntity) {
+        return this.lambdaUpdate()
+                .set(VersionEntity::getRemark, versionEntity.getRemark())
+                    .eq(VersionEntity::getProjectName, versionEntity.getProjectName())
+                    .eq(VersionEntity::getProjectEnv, versionEntity.getProjectEnv())
+                    .eq(VersionEntity::getId, versionEntity.getId())
+                .update();
     }
 
 

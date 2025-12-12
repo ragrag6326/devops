@@ -13,32 +13,6 @@ public interface GitlabMrService extends IService<GitlabMrEntity> {
 
     List<GitlabMrEntity> listByProjectName(String projectName);
 
-    String syncFromGitlab(String projectName);
-
-    /**
-     * 查詢特定時間區間內已合併的 MR
-     * @param projectName
-     * @param targetBranch
-     * @param start  MR起始時間
-     * @param end   現在時間 now()
-     * @return
-     */
-    List<GitlabMrEntity> getMergedMrsBetween(String projectName, String targetBranch, LocalDateTime start, LocalDateTime end);
-
-    /**
-     * 標記版本
-     * @param mrEntityIds
-     * @param version
-     */
-    void stampVersionForMrs(List<Long> mrEntityIds, String version);
-
-    /**
-     * 標記退版
-     * @param projectName
-     * @param version
-     */
-    void unstampVersionForMrs(String projectName, String version);
-
     /**
      * 分頁查詢用戶
      * @param page 頁碼
@@ -50,4 +24,47 @@ public interface GitlabMrService extends IService<GitlabMrEntity> {
      * @return 分頁查詢結果
      */
     PageBean page(Integer page, Integer pageSize, String projectName, String state , LocalDate mrStartDate , LocalDate mrEndDate);
+
+
+    /** gitlab 資料同步用 */
+    String syncFromGitlab(String projectName);
+
+
+    /**
+     * 依環境查「這次要收進 Release Note 的 MR」
+     * dev：尚未釋出到 dev 的 merged MR
+     * prod：已釋出 dev、但尚未釋出 prod 的 merged MR
+     */
+    List<GitlabMrEntity> getMergedMrsBetween(
+            String projectName,
+            String targetBranch,
+            String env ,
+            LocalDateTime start,
+            LocalDateTime end
+    );
+
+    /**
+     * 針對這次版本，標記 MR 的 version_dev / version_prod & released_xxx
+     */
+    void stampVersionForMrs(String projectName, String env, List<Long> mrEntityIds, String version);
+
+    /**
+     * 退版時解除 MR 與版本關聯（只針對當前 env）
+     */
+    void unstampVersionForMrs(String projectName, String env ,String version);
+
+
+    /**
+     * UPDATE () SET released_dev = TRUE, version_dev = #{version} WHERE project_name = #{projectName} AND released_dev = False AND state = merged"
+     * @param projectName
+     * @param version
+     */
+    Boolean markReleaseDev(String projectName, String version);
+
+    /**
+     * UPDATE () SET released_prod = TRUE, version_prod = #{version} WHERE project_name = #{projectName} AND released_dev = TRUE"
+     * @param projectName
+     * @param version
+     */
+    Boolean markReleaseProd(String projectName, String version);
 }

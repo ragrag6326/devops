@@ -17,16 +17,6 @@ const queryMRPage = ( page , pageSize , name , state ,start , end) =>
 const queryByProjectName = (Projectname) => 
     request.get(`/gitlab/list/${Projectname}`)
 
-// 新增
-const addUserApi = (data) => request.post('/users', data)
-
-// 修改
-const updateUserApi = (emp) => request.put(`/users/${emp.id}`, emp)
-
-// 刪除
-const deleteUserApi = (ids) => request.delete(`/users/${ids}`)
-
-
 export {
     queryMRPage ,
     queryByProjectName,

@@ -21,6 +21,7 @@ export const initTheme = () => {
   const savedTheme = localStorage.getItem('theme');
   // 如果沒有儲存過，可以檢查系統偏好
   const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  console.log("systemPrefersDark" + systemPrefersDark);
   
   if (savedTheme === 'dark' || (!savedTheme && systemPrefersDark)) {
     toggleTheme(true);

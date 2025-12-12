@@ -15,9 +15,10 @@ export default defineConfig({
     proxy:{
       '/api':{
         // target:'https://m1.apifoxmock.com/m1/6436769-6134289-default',
-        target:'http://localhost:8080',
+        //target:'http://localhost:8080',
+        target:'http://192.168.1.35:8000',
         changeOrigin:true,
-        rewrite:(path)=>path.replace(/^\/api/,'')
+        //rewrite:(path)=>path.replace(/^\/api/,'')
       }
     }
   }

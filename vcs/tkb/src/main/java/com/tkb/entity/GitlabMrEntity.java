@@ -16,8 +16,6 @@ public class GitlabMrEntity {
 
     private String projectName;
 
-    private String version;
-
     private Long mrId;
 
     private Integer iid;
@@ -27,6 +25,14 @@ public class GitlabMrEntity {
     private String description;
 
     private String state;
+
+    private String versionDev;
+
+    private String versionProd;
+
+    private Boolean releasedDev;
+
+    private Boolean releasedProd;
 
     private String targetBranch;
 
@@ -47,4 +53,5 @@ public class GitlabMrEntity {
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;
+
 }

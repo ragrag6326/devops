@@ -1,0 +1,27 @@
+<svg width="200" height="200" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect width="200" height="200" fill="none"/>
+
+    <defs>
+        <linearGradient id="mainBranchGradient" x1="100" y1="160" x2="100" y2="40" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#0052CC" /> <stop offset="100%" stop-color="#2684FF" /> </linearGradient>
+        <linearGradient id="featureBranchGradient" x1="100" y1="120" x2="100" y2="80" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#6554C0" /> <stop offset="100%" stop-color="#8777D9" /> </linearGradient>
+        <filter id="nodeShadow" x="-50%" y="-50%" width="200%" height="200%">
+            <feDropShadow dx="0" dy="2" stdDeviation="1.5" flood-color="#000000" flood-opacity="0.2"/>
+        </filter>
+    </defs>
+
+    <path d="M100 160 V50" stroke="url(#mainBranchGradient)" stroke-width="8" stroke-linecap="round"/>
+    <path d="M100 40 L90 55 H110 L100 40Z" fill="#2684FF" /> <path d="M100 120 C140 120, 140 80, 100 80" stroke="url(#featureBranchGradient)" stroke-width="6" stroke-linecap="round" fill="none"/>
+
+    <g filter="url(#nodeShadow)">
+        <circle cx="100" cy="160" r="10" fill="#0052CC" stroke="white" stroke-width="3"/>
+
+        <circle cx="100" cy="120" r="10" fill="#0052CC" stroke="white" stroke-width="3"/>
+
+        <circle cx="130" cy="100" r="8" fill="#6554C0" stroke="white" stroke-width="3"/>
+
+        <circle cx="100" cy="80" r="10" fill="#2684FF" stroke="white" stroke-width="3"/>
+    </g>
+
+</svg>

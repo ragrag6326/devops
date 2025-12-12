@@ -1,6 +1,11 @@
 package com.tkb.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
+import com.baomidou.mybatisplus.extension.conditions.update.LambdaUpdateChainWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.github.pagehelper.Page;
 import com.github.pagehelper.PageHelper;
@@ -10,6 +15,7 @@ import com.tkb.config.GitlabConfig;
 import com.tkb.entity.GitlabMrEntity;
 import com.tkb.mapper.GitlabMrMapper;
 import com.tkb.service.GitlabMrService;
+import com.tkb.utils.Constant.GitlabReleaseState;
 import com.tkb.vo.PageBean;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,7 +23,6 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.util.List;
 
 @Slf4j
@@ -43,7 +48,7 @@ public class GitlabMrServiceImpl extends ServiceImpl<GitlabMrMapper, GitlabMrEnt
         // Token
         String token = gitlabConfig.getToken();
 
-        // 找對應專案的 project ID
+        // 找 application 中對應專案的 project ID
         Long projectId = gitlabConfig.getProjects()
                 .stream()
                 .filter(project -> project.getName().equals(projectName))
@@ -86,38 +91,73 @@ public class GitlabMrServiceImpl extends ServiceImpl<GitlabMrMapper, GitlabMrEnt
     }
 
     @Override
-    public List<GitlabMrEntity> getMergedMrsBetween(String projectName, String targetBranch, LocalDateTime start, LocalDateTime end) {
-        return this.lambdaQuery()
+    public List<GitlabMrEntity> getMergedMrsBetween(String projectName, String targetBranch, String env ,LocalDateTime start, LocalDateTime end) {
+
+        LambdaQueryChainWrapper<GitlabMrEntity> qw = this.lambdaQuery()
                 .eq(GitlabMrEntity::getProjectName, projectName)
-                .eq(GitlabMrEntity::getState, "merged") // 只找已合併的
+                .eq(GitlabMrEntity::getState, "merged")          // 只找已合併的
                 .eq(GitlabMrEntity::getTargetBranch, targetBranch)   // 動態傳入 develop 或 main
-                .isNull(GitlabMrEntity::getVersion) // 只選取尚未被標記的 MR
-                .between(GitlabMrEntity::getMergedAt, start, end)
-                .orderByAsc(GitlabMrEntity::getMergedAt) // 依照合併時間排序
-                .list();
+                //.between(GitlabMrEntity::getMergedAt, start, end)
+                .orderByAsc(GitlabMrEntity::getMergedAt); // 依照合併時間排序
+
+        if ("dev".equalsIgnoreCase(env)) {
+            // DEV：只挑還沒發過 DEV 的 MR
+            qw.eq(GitlabMrEntity::getReleasedDev, GitlabReleaseState.FALSE.getCode());
+        } else if ("prod".equalsIgnoreCase(env)) {
+            // PROD：只挑「已發 DEV、尚未發 PROD」的 MR
+            qw.eq(GitlabMrEntity::getReleasedDev, GitlabReleaseState.TRUE.getCode())
+              .eq(GitlabMrEntity::getReleasedProd, GitlabReleaseState.FALSE.getCode());
+        }
+
+        return qw.list();
+
     }
 
     @Override
-    public void stampVersionForMrs(List<Long> mrEntityIds, String version) {
+    public void stampVersionForMrs(
+            String projectName,
+            String env,
+            List<Long> mrEntityIds,
+            String version
+    ) {
         if (mrEntityIds == null || mrEntityIds.isEmpty()) {
             return;
-
         }
-        // 批量更新功能
-        this.lambdaUpdate()
-                .set(GitlabMrEntity::getVersion, version) // 設定版本號
-                .in(GitlabMrEntity::getId, mrEntityIds)   // 根據 DB 的主鍵 ID 列表進行更新
-                .update();
+
+        LambdaUpdateWrapper<GitlabMrEntity> uw = Wrappers.lambdaUpdate();
+
+        uw.eq(GitlabMrEntity::getProjectName, projectName)
+                .in(GitlabMrEntity::getId, mrEntityIds);
+
+        if ("dev".equalsIgnoreCase(env)) {
+            uw.set(GitlabMrEntity::getVersionDev, version)
+                    .set(GitlabMrEntity::getReleasedDev, GitlabReleaseState.TRUE.getCode());
+        } else if ("prod".equalsIgnoreCase(env)) {
+            uw.set(GitlabMrEntity::getVersionProd, version)
+                    .set(GitlabMrEntity::getReleasedProd, GitlabReleaseState.TRUE.getCode());
+        }
+
+        this.update(uw);
     }
 
     @Override
-    public void unstampVersionForMrs(String projectName, String version) {
-        // 將特定版本號的 MR 的 version 欄位設為 NULL
-        this.lambdaUpdate()
-                .set(GitlabMrEntity::getVersion, null) // 設為 NULL，解除綁定
-                .eq(GitlabMrEntity::getProjectName, projectName)
-                .eq(GitlabMrEntity::getVersion, version) // 鎖定目標版本
-                .update();
+    public void unstampVersionForMrs(String projectName, String env, String version) {
+
+        LambdaUpdateChainWrapper<GitlabMrEntity> uw = this.lambdaUpdate()
+                .eq(GitlabMrEntity::getProjectName, projectName);
+
+        if ("dev".equalsIgnoreCase(env)) {
+            uw.eq(GitlabMrEntity::getVersionDev, version)
+                    .set(GitlabMrEntity::getVersionDev, null)
+                    .set(GitlabMrEntity::getReleasedDev, GitlabReleaseState.FALSE.getCode());
+
+        } else if ("prod".equalsIgnoreCase(env)) {
+            uw.eq(GitlabMrEntity::getVersionProd, version)
+                    .set(GitlabMrEntity::getVersionProd, null)
+                    .set(GitlabMrEntity::getReleasedProd, GitlabReleaseState.FALSE.getCode());
+        }
+
+        this.update(uw);
     }
 
     @Override
@@ -137,5 +177,34 @@ public class GitlabMrServiceImpl extends ServiceImpl<GitlabMrMapper, GitlabMrEnt
 
         return new PageBean(pageList.getTotal(), pageList.getResult());
 
+    }
+
+    /**
+     * UPDATE () SET released_dev = TRUE, version_dev = #{version} WHERE project_name = #{projectName} AND released_dev = False AND state = merged"
+     */
+    @Override
+    public Boolean markReleaseDev(String projectName, String version) {
+        // 0 = True
+
+        return this.lambdaUpdate()
+                .set(GitlabMrEntity::getVersionDev, version)
+                .set(GitlabMrEntity::getReleasedDev, GitlabReleaseState.TRUE.getCode()) //  1 = True
+                .eq(GitlabMrEntity::getProjectName, projectName)
+                .eq(GitlabMrEntity::getReleasedDev, GitlabReleaseState.FALSE.getCode())
+                .eq(GitlabMrEntity::getState, "merged")
+                .update();
+    }
+    /**
+     * UPDATE () SET released_prod = TRUE, version_prod = #{version} WHERE project_name = #{projectName} AND released_dev = TRUE"
+     */
+    @Override
+    public Boolean markReleaseProd(String projectName, String version) {
+        return this.lambdaUpdate()
+                .set(GitlabMrEntity::getVersionProd, version)
+                .set(GitlabMrEntity::getReleasedProd, GitlabReleaseState.TRUE.getCode())  // 0 = True
+                .eq(GitlabMrEntity::getProjectName, projectName)
+                .eq(GitlabMrEntity::getReleasedDev, GitlabReleaseState.TRUE.getCode())
+                .eq(GitlabMrEntity::getReleasedProd, GitlabReleaseState.FALSE.getCode())
+                .update();
     }
 }

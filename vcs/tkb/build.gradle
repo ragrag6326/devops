@@ -1,7 +1,9 @@
 plugins {
     id 'java'
-    id 'org.springframework.boot' version '3.5.2'
-    id 'io.spring.dependency-management' version '1.1.7'
+//    id 'org.springframework.boot' version '3.5.2'
+//    id 'io.spring.dependency-management' version '1.1.7'
+    id 'org.springframework.boot' version '3.3.6'
+    id 'io.spring.dependency-management' version '1.1.6'
 }
 
 group = 'com.tkb'
@@ -18,42 +20,63 @@ repositories {
     mavenCentral()
 }
 
+// 1. 定義 Spring Cloud 版本變數 (對應 Boot 3.3.x 的是 2023.0.x 系列)
+ext {
+    set('springCloudVersion', "2023.0.3")
+}
+
 dependencies {
+    // 1. Web 模組
     implementation('org.springframework.boot:spring-boot-starter-web')
 
-    // lombok 註解 ， 需加上 compileOnly 跟 annotationProcessor(編譯時執行註解處理器)
+    // 2. lombok 註解 ， 需加上 compileOnly 跟 annotationProcessor(編譯時執行註解處理器)
     compileOnly("org.projectlombok:lombok")
     annotationProcessor("org.projectlombok:lombok")
 
-    // mysql 驅動
+    // 3. mysql 驅動
     runtimeOnly("mysql:mysql-connector-java:8.0.33")
+    //runtimeOnly("com.mysql:mysql-connector-j")
 
     // 確保有資料庫連線池 (如 HikariCP) 的 Starter
     implementation('org.springframework.boot:spring-boot-starter-data-jdbc')
 
-    // MyBatis
+    // 4. MyBatis
     implementation("com.baomidou:mybatis-plus-boot-starter:3.5.7")
     // 確保 mybatis-spring 版本相容 Spring Boot 3.x/Spring 6.x
     implementation("org.mybatis:mybatis-spring:3.0.3")
-    // MyBatis PageHelper  Starter
+
+    // 5. MyBatis PageHelper  Starter
     implementation 'com.github.pagehelper:pagehelper-spring-boot-starter:2.1.0'
 
     // openfeign
-    implementation("org.springframework.cloud:spring-cloud-starter-openfeign:4.3.0")
+    //implementation("org.springframework.cloud:spring-cloud-starter-openfeign:4.3.0")
+    implementation("org.springframework.cloud:spring-cloud-starter-openfeign")
     // okhttp 支持連接池
     implementation("com.squareup.okhttp3:okhttp:5.1.0")
 
-    // alibaba json 工具
+    // 工具類
     implementation("com.alibaba:fastjson:2.0.53")
-
     // jwt
     implementation("io.jsonwebtoken:jjwt:0.9.1")
     // 添加 JAXB API 依赖 (Java 9+ 需要)
     implementation("javax.xml.bind:jaxb-api:2.3.1")
 
+    // Knife4j for Spring Boot 3 (OpenAPI3 / Jakarta)
+    implementation("com.github.xiaoymin:knife4j-openapi3-jakarta-spring-boot-starter:4.5.0")
+    // implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.5")
+
+    // spring-security
+    // implementation 'org.springframework.boot:spring-boot-starter-security'
+
     // 測試
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}"
+    }
 }
 
 tasks.named('test') {

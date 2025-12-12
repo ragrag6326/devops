@@ -1,6 +1,6 @@
 <script setup>
 import { onMounted, ref , watch } from 'vue'
-import { queryVersionPage , queryVersionById , deleteVersionById  , editRemark , getLatestSuccessVersion} from "@/api/version";
+import { queryVersionPage } from "@/api/version";
 import { triggerJenkinsBackendBuild } from "@/api/jenkins";
 import { ElMessage , ElMessageBox } from 'element-plus'
 
@@ -14,7 +14,7 @@ const loading = ref(false)
 // 搜索欄
 const projectNameOptions = [
     { label: "tkbgoapi", value: "tkbgoapi" },
-    { label: "tkbtv", value: "tkbtv" },
+    { label: "tkbgotv", value: "tkbgotv" },
     { label: "tkbnuxt", value: "tkbnuxt" },
 ]
 
@@ -60,14 +60,6 @@ const handleCurrentChange = (val) => {
   search()
 }
 
-// ---------------- 版本數據列表 ----------------
-const multipleSelection = ref([]);
-
-// 監聽表格勾選事件 (Element Plus 自動傳入 val，即所有選中的行物件)
-const handleSelectionChange = (val) => {
-    multipleSelection.value = val;
-};
-
 // --------------------------------- 查詢歷史紀錄 ---------------------------------
 const search = async () => {
     try {
@@ -102,12 +94,9 @@ const search = async () => {
 // ----------------- 版號表單對話框 --------------------------------- 
 const formTitle = ref('');
 const addDialogVisible = ref(false);  // 對話框默認隱藏
-const editDialogVisible = ref(false);  // 對話框默認隱藏
 const versionFormRef = ref();          // 表單驗證
-
 // (新增、修改) 版號表單 數據回顯
 const versionForm = ref ({ 
-    id: "" ,
     name : "" ,
     env: "",
     version: "",
@@ -124,7 +113,7 @@ const rules = {
 }
 
 // 版號表單初始化
-const InitAddForm = () => {
+const InitEditForm = () => {
 
     // 點擊添加前 清空的表單
     for (let key in versionForm.value ) {
@@ -139,96 +128,16 @@ const InitAddForm = () => {
     addDialogVisible.value = true;
 }
 
-// 版號表單初始化
-const InitEditForm = () => {
-
-    // 點擊添加前 清空的表單
-    for (let key in versionForm.value ) {
-        if (!Array.isArray(versionForm.value[key]) ) {
-            versionForm.value[key] = '';
-        } else {
-            versionForm.value[key] = [];
-        }
-    }
-
-    formTitle.value = '修改版號';
-    editDialogVisible.value = true;
-}
 
 // 點開(編輯)版號表單 - 數據回顯
 const handleEdit = async (row) => {
-    InitEditForm();
-
-    const result = await queryVersionById( row.id ) ;
+    const result = await queryVersionByIdApi( row.id ) ;
     if ( result.code ) {
+        InitEditForm();
+        formTitle.value = '編輯版號';
         versionForm.value = result.data;
-    } else {
-        // 處理錯誤情況 (可選)
-        console.error('查詢失敗:', result.msg);
     }
 }
-
-// 移除操作
-const handleDelete = async (row) => {
-
-    ElMessageBox.confirm(`確定是否刪除 專案:${row.projectName} 環境:${row.projectEnv} 版號:${row.version} `, '提示', {
-        cancelButtonText: '取消',
-        confirmButtonText: '確定刪除',
-        type: 'warning', 
-        customClass: 'glass-confirm'
-    }).then(async () => {
-        const result = await deleteVersionById(row.id)
-        console.log('handleDelete API回傳結果:', result);
-        
-        if ( result.code ) {
-            ElMessage.success('刪除成功');
-            search(); 
-        } else {
-            ElMessage.error('移除失敗:' + result.msg);
-        }
-    }).catch(() => {
-        ElMessage.info('已取消');
-    })
-}
-
-// 批量移除操作
-const handleBatchDelete = async () => {
-
-    if (multipleSelection.value.length === 0) {
-        return;
-    }
-
-    // 取出所有 ID 變成陣列，例如：[101, 102, 103]
-    const ids = multipleSelection.value.map(item => item.id);
-    console.log(ids);
-
-    ElMessageBox.confirm(`確定要刪除這 ${ids.length} 筆資料嗎？此操作無法恢復。`, '警告', {
-        confirmButtonText: '確定刪除',
-        cancelButtonText: '取消',
-        type: 'warning', 
-        customClass: 'glass-confirm'
-    }).then(async () => {
-        try {
-            const result = await deleteVersionById(ids)
-            console.log('handleDelete API回傳結果:', result);
-            
-            if ( result.code ) {
-                ElMessage.success('批量刪除成功');
-                search(); 
-                multipleSelection.value = [];
-            } else {
-                ElMessage.error(result.msg || '刪除失敗');
-            }
-        } catch (error){
-            console.error('刪除錯誤:', error);
-            ElMessage.error('系統發生錯誤');
-        }
-    }).catch(() => {
-        ElMessage.info('已取消');
-    })
-}
-
-
 
 // 確認 版號表單 ( 新增 、 修改 )
 const submitVersionAddandEdit = async () => {
@@ -240,75 +149,37 @@ const submitVersionAddandEdit = async () => {
         if (valid) {
 
             let result ;
-            
+
             if ( versionForm.value.id ) { 
+
                 // 修改
-                result = await editRemark(versionForm.value);
-                console.log('API回傳結果:', result);
-                
-                if ( result.code ) {
-                    editDialogVisible.value = false;
-                    search();
-                    ElMessage.success('修改成功');
-                } else {
-                    ElMessage.error('修改失敗:' + result.msg);
-                }
+                ElMessage.success("修改")
+
             } else { 
+
                 ElMessageBox.confirm(`此操作將進行環境更新 是否繼續? `, '提示', {
                     cancelButtonText: '取消',
                     confirmButtonText: '確定',
-                    type: 'warning', // 跳出的樣式 
-                    customClass: 'glass-confirm' // 自定義樣式類名
+                    type: 'warning' // 跳出的樣式 
                 }).then(async () => {
-                    //ElMessage.success("新增")
-                    console.log("新增");
-
-                    const projectName = versionForm.value.name
-
-                    const [devRes, prodRes] = await Promise.all([
-                        getLatestSuccessVersion(projectName , 'dev'),
-                        getLatestSuccessVersion(projectName , 'prod')
-                    ]);
-
-                    const devVer = devRes.data; 
-                    const prodVer = prodRes.data; 
-                    console.log(`devVer= ` + devVer , "prodVer" + prodVer);
-
-                    // 2. 版本比對 (Guard Clauses)
-                    // 如果 Prod 已經有這個版本 (且不為 null)，則禁止更新
-                    if (prodVer && devVer === prodVer) {
-                        ElMessage.warning(`禁止更新：Prod 環境已是最新版本 (${prodVer})`);
-                        return; // ⛔️ 中斷，不執行 Jenkins
+                    const result = await triggerJenkinsBackendBuild(versionForm.value.name , versionForm.value.env , versionForm.value.branch )
+                    if ( result.code ) {
+                        ElMessage.success('正在部屬');
+                        search(); 
+                    } else {
+                        ElMessage.error('部屬失敗:' + result.msg);
                     }
-
-                    // 防止異常：Prod 版本比 Dev 還大
-                    if (prodVer && prodVer > devVer) {
-                            ElMessage.error(`版本異常：Prod (${prodVer}) 高於 Dev (${devVer})，請檢查！`);
-                            return; // ⛔️ 中斷
-                    }
-                    
-                    // 3. 通過檢查，執行 Jenkins 部署
-                    ElMessage.success("檢查通過，開始請求部署...");
-
-                    // const result = await triggerJenkinsBackendBuild(versionForm.value.name , versionForm.value.env , versionForm.value.branch )
-                    // if ( result.code ) {
-                    //      ElMessage.success('正在部屬');
-                    //      search(); 
-                    // } else {
-                    //      ElMessage.error('部屬失敗:' + result.msg);
-                    // }
-                    addDialogVisible.value = false;
-                    search()
                 }).catch(() => {
                     ElMessage.info('已取消');
                 })
             }
             
+            addDialogVisible.value = false;
+            search()
+
         } else {
             ElMessage.error("表單驗證未通過 .... 請重新確認")
         }
-
-
     })
 }
 
@@ -336,7 +207,7 @@ onMounted (() => {
     <div id="container">
 
         <el-form :inline="true" :model="searchForm" class="demo-form-inline">
-            
+            <!-- {{ projectStateOptions  }} -->
             <el-form-item label="專案名稱">
                 <el-select v-model="searchForm.name" placeholder="全部" clearable style="width:120px">
                     <el-option  v-for="name in projectNameOptions" :key="name.value" :label="name.label" :value="name.value" />
@@ -361,16 +232,18 @@ onMounted (() => {
             </el-form-item>
         </el-form>
 
-        <el-button el-button type="primary" @click="InitAddForm">新增版號</el-button>
-        <el-button el-button type="danger" :disabled="multipleSelection.length === 0" @click="handleBatchDelete"> 批量刪除</el-button>
+        <el-button el-button type="primary" @click="InitEditForm">新增版號</el-button>
+        <el-button el-button type="danger"  @click="DeleteVersion"> 批量刪除</el-button>
 
     </div>
+
+
 
     
     <!-- 數據表格顯示 -->
     <div class="table-container">
-
-        <el-table :data="versionList" border style="width:100%" v-loading="loading" @selection-change="handleSelectionChange">
+        <!-- {{versionList}} -->
+        <el-table :data="versionList" border style="width:100%" v-loading="loading">
                 <el-table-column type="selection" width="35" align="center" />
                 <el-table-column prop="id" label="編號" min-width="20"/>
                 <el-table-column prop="projectName" label="專案名稱" min-width="30" show-overflow-tooltip />
@@ -413,7 +286,7 @@ onMounted (() => {
     </div>
 
     <!-- 新增版號(add) dialog -->
-    <el-dialog v-model="addDialogVisible" :title="formTitle" width="600px" class="custom-edit-dialog">
+    <el-dialog v-model="addDialogVisible" :title="formTitle" width="600px">
 
         <el-form :model="versionForm" :rules="rules" ref="versionFormRef" label-width="90px">
 
@@ -441,23 +314,6 @@ onMounted (() => {
 
         <template #footer>
             <el-button @click="addDialogVisible = false">取消</el-button>
-            <el-button type="primary" @click="submitVersionAddandEdit()">確認</el-button>
-        </template>
-    </el-dialog>
-
-    <!-- 修改版號(edit) dialog -->
-    <el-dialog v-model="editDialogVisible" :title="formTitle" width="600px" class="custom-edit-dialog">
-
-        <el-form :model="versionForm" :rules="rules" ref="versionFormRef" label-width="90px">
-
-            <el-form-item label="備註">
-                <el-input type="textarea" v-model="versionForm.remark" />
-            </el-form-item>
-
-        </el-form>
-
-        <template #footer>
-            <el-button @click="editDialogVisible = false">取消</el-button>
             <el-button type="primary" @click="submitVersionAddandEdit()">確認</el-button>
         </template>
     </el-dialog>
@@ -640,78 +496,5 @@ onMounted (() => {
 }
 
 
-.glass-confirm .el-button--primary {
-    /* 確保按鈕使用您定義的漸層和發光效果 */
-    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%) !important;
-    border: none !important;
-    color: #fff !important; /* 文字顏色 */
-    box-shadow: 0 4px 10px rgba(99, 102, 241, 0.4);
-    font-weight: 600 !important;
-    transition: all 0.3s ease;
-}
 
-.glass-confirm .el-button--primary:hover {
-    opacity: 0.9;
-    transform: translateY(-1px);
-}
-
-
-/* 2. ❌ 取消按鈕 (Cancel Button) - 玻璃透明/淡白色邊框 */
-.glass-confirm .el-button--default,
-.glass-confirm .el-button--info {
-    /* 移除預設的白色背景 */
-    background: rgba(255, 255, 255, 0.1) !important; 
-    
-    /* 增加透明邊框和柔和文字顏色 */
-    border: 1px solid rgba(255, 255, 255, 0.2) !important;
-    color: var(--text-main, #f1f5f9) !important; 
-    font-weight: 500 !important;
-}
-
-.glass-confirm .el-button--default:hover,
-.glass-confirm .el-button--info:hover {
-    /* 懸停時背景輕微加亮 */
-    background: rgba(255, 255, 255, 0.2) !important;
-    border-color: rgba(255, 255, 255, 0.3) !important;
-}
-
-/* 3. 調整警告圖標顏色 (選填，使警告色更柔和) */
-.glass-confirm .el-icon-warning {
-    color: #fbbf24 !important; /* 柔和的黃色/琥珀色 */
-}
-</style>
-
-<style>
-/* 注意：這裡沒有 scoped
-   因為 Dialog 被掛載到 body，scoped 樣式無法觸及
-*/
-
-/* 1. 針對這個 Dialog 內的 "確認" 按鈕 (Primary) */
-.custom-edit-dialog .el-dialog__footer .el-button--primary {
-    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); /* 紫色系漸層 */
-    border: none;
-    box-shadow: 0 2px 6px rgba(99, 102, 241, 0.4);
-    color: white;
-    transition: all 0.3s;
-}
-
-.custom-edit-dialog .el-dialog__footer .el-button--primary:hover {
-    opacity: 0.9;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.5);
-}
-
-/* 2. 針對這個 Dialog 內的 "取消" 按鈕 (Default) */
-/* 排除 primary 和 danger，剩下的就是普通按鈕 */
-.custom-edit-dialog .el-dialog__footer .el-button:not(.el-button--primary):not(.el-button--danger) {
-    background-color: #f3f4f6; /* 淡淡的灰色背景 */
-    border: 1px solid #e5e7eb;
-    color: #4b5563;
-}
-
-.custom-edit-dialog .el-dialog__footer .el-button:not(.el-button--primary):not(.el-button--danger):hover {
-    background-color: #e5e7eb;
-    color: #111827;
-    border-color: #d1d5db;
-}
 </style>
