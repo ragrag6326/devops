@@ -5,14 +5,14 @@ import { useRouter, useRoute } from 'vue-router'
 import { toggleTheme } from '@/utils/theme';
 import { 
     EditPen, SwitchButton, Promotion, Message, 
-    User, HomeFilled, Avatar, Money, TrendCharts,
+    User, HomeFilled, Avatar, Money, TrendCharts, Menu,
     ArrowRight, ArrowDown
 } from '@element-plus/icons-vue';
 
 const router = useRouter();
 const route = useRoute(); // 用於監聽路由變化
 const currentUser = ref('');
-// 假設您在這裡請求部門列表或版本歷史
+// 請求部門列表或版本歷史
 const fetchData = () => {
     console.log('--- 數據正在被請求/刷新中 ---');
 };
@@ -28,6 +28,12 @@ const menuItems = [
     { 
         name: 'MR/程式碼審核', path: '/mr', icon: Avatar, children: [
             { name: '歷史紀錄查詢', path: '/mr/history', icon: Money }, 
+        ]
+    },
+    { 
+        name: '系統', path: '/system', icon: Menu, children: [
+            { name: '狀態監控', path: '/system/monitor', icon: TrendCharts }, 
+            { name: '流量切換', path: '/system/switch', icon: TrendCharts }, 
         ]
     },
     { 
