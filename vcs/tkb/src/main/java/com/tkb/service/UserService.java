@@ -6,7 +6,7 @@ import com.tkb.entity.UserEntity;
 import com.tkb.vo.PageBean;
 
 public interface UserService extends IService<UserEntity> {
-    String login(UserEntity user);
+    String login(String username, String password);
 
     /**
      * 分頁查詢用戶

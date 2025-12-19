@@ -27,7 +27,7 @@ if [[ "$1" != "blue" && "$1" != "green" ]]; then
   exit 99
 fi
 
-source ../utils/sshToolUtil.sh
+source /opt/vcs/tools/utils/sshToolUtil.sh
 
 
 # 檢查
@@ -45,13 +45,16 @@ HEALTH_URL="https://localhost:${CHECK_PORT}/front/toHeader.action"
 # -k: 允許不安全的 SSL 連線。
 
 for i in {1..5} ; do
-  health_check_code=$(ssh_function "if curl -sfk "${HEALTH_URL}"  -H \"HOST: ${HEADER_HOST}\" &> /dev/null ; then echo 0 ; else echo 1 ;fi")
-  if [[ $health_check_code == 0 ]] ; then
-    echo $health_check_code
-    break
+
+  HTTP_STATUS=$(ssh_function "curl -sk -o /dev/null -w "%{http_code}" "${HEALTH_URL}"  -H \"HOST: ${HEADER_HOST}\"")
+
+  if [[ $HTTP_STATUS = 200 ]] ; then
+    echo $HTTP_STATUS
+    exit 0;
   fi
 done
 
-if [[ $health_check_code != 0 ]] ; then
-  echo $health_check_code
+if [[ $HTTP_STATUS != 200 ]] ; then
+  echo $HTTP_STATUS
+  exit 1;
 fi

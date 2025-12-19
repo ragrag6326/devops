@@ -153,21 +153,21 @@ watch(() => versionForm.value.env, async (newEnv) => {
             const prodVer = prodLatestRes.data; // 1.0.20 或 1.0.19
 
             // 如果 Dev (1.0.20) == Prod (1.0.20)
-            if (prodVer && devVer === prodVer) {
-                ElMessageBox.alert(
-                    `目前 Prod 已是最新版本 (${prodVer})，與 Dev 同步。\n請先更新 Dev 環境後再執行此操作。`,
-                    '無法更新',
-                    { type: 'warning' }
-                );
-                // 清空版號，並建議讓確認按鈕 disable
-                versionForm.value.version = '';
-                return;
-            }
+            // if (prodVer && devVer === prodVer) {
+            //     ElMessageBox.alert(
+            //         `目前 Prod 已是最新版本 (${prodVer})，與 Dev 同步。\n請先更新 Dev 環境後再執行此操作。`,
+            //         '無法更新',
+            //         { type: 'warning' }
+            //     );
+            //     // 清空版號，並建議讓確認按鈕 disable
+            //     versionForm.value.version = '';
+            //     return;
+            // }
 
             // 通過檢查，自動填入 Dev 的版號 (e.g. 1.0.20)
-            versionForm.value.version = devVer;
+            versionForm.value.version = prodVer;
             versionForm.value.branch = 'develop'; // Prod 通常固定分支
-            ElMessage.success(`已自動帶入 Dev 部屬成功版本: ${devVer}`);
+            ElMessage.success(`已自動帶入 Prod 部屬成功版本: ${prodVer}`);
         }
 
     } catch (e) {

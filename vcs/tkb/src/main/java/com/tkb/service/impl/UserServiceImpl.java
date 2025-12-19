@@ -22,10 +22,10 @@ import java.util.Map;
 public class UserServiceImpl extends ServiceImpl<UserMapper, UserEntity> implements UserService {
 
     @Override
-    public String login(UserEntity user) {
+    public String login(String username , String password) {
         UserEntity authUser = this.lambdaQuery()
-                .eq(UserEntity::getUsername, user.getUsername())
-                .eq(UserEntity::getPassword, user.getPassword())
+                .eq(UserEntity::getUsername, username)
+                .eq(UserEntity::getPassword, password)
                 .one();
 
         if (authUser != null) {
@@ -38,7 +38,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserEntity> impleme
             return jwt;
         }
 
-        return "未找到" + user.getUsername() + "該用戶";
+        return "未找到" + username + "該用戶";
     }
 
     @Override

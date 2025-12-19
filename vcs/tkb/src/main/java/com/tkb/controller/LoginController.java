@@ -1,6 +1,6 @@
 package com.tkb.controller;
 
-import com.tkb.entity.UserEntity;
+import com.tkb.dto.LoginDTO;
 import com.tkb.utils.result.Result;
 import com.tkb.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -20,14 +20,17 @@ public class LoginController {
     private final UserService userService;
 
     @PostMapping("/login")
-    public Result login(@RequestBody UserEntity user) {
-        log.info("/login 用戶: {} , 嘗試登入" , user.getUsername());
+    public Result login(@RequestBody LoginDTO Login) {
+        String username = Login.getUsername();
+        String password = Login.getPassword();
 
-        if ( user.getUsername() == null || user.getPassword() == null ) {
+        log.info("/login 用戶: {} , 嘗試登入" , username);
+
+        if ( username == null || password == null ) {
             return Result.error("參數無效");
         }
 
-        String authUser = userService.login(user);
+        String authUser = userService.login(username , password);
 
         if (authUser == null) {
             return Result.error("登入失敗");
