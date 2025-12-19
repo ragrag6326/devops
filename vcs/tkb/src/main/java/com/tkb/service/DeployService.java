@@ -4,7 +4,7 @@ import com.tkb.dto.DeployDTO;
 
 public interface DeployService  {
 
-    void markDeploying(DeployDTO dto);
+    Long markDeploying(DeployDTO dto);
 
     void markSuccess(DeployDTO dto);
 

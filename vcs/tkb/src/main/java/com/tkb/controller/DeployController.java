@@ -17,9 +17,9 @@ public class DeployController {
     private final DeployService service;
 
     @PostMapping("/deploying")
-    public Result deploying(@RequestBody DeployDTO dto) {
-        service.markDeploying(dto);
-        return Result.success();
+    public Result<Long> deploying(@RequestBody DeployDTO dto) {
+        Long id = service.markDeploying(dto);
+        return Result.success(id);
     }
 
     @PostMapping("/success")

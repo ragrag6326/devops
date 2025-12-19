@@ -40,7 +40,7 @@ public interface VersionService extends IService<VersionEntity> {
      * @param env
      * @return
      */
-    String getNextVersion(String projectName, String env);
+    Result<String> getNextVersion(String projectName, String env);
 
     /**
      * 取得 dev環境 最後一次成功的 版號
@@ -48,7 +48,7 @@ public interface VersionService extends IService<VersionEntity> {
      * @param env
      * @return
      */
-    String getLastSuccessVersion(String projectName, String dev);
+    String getLastSuccessVersion(String projectName, String env);
 
     /**
      * 獲取發版成功的 releaseNote
@@ -65,4 +65,12 @@ public interface VersionService extends IService<VersionEntity> {
     Boolean editRemark(VersionEntity versionEntity);
 
 
+    /**
+     * 檢測 prod 環境是否能夠部屬
+     * @param projectName
+     * @param env
+     * @param targetVersion
+     * @return
+     */
+    Result<String> checkdeployable(String projectName, String env , String targetVersion);
 }

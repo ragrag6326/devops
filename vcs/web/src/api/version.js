@@ -49,7 +49,6 @@ const editRemark = ( data ) =>
  * 查詢最後更版版號
  * @param 
  */
-
 const getLatestSuccessVersion = (name , env) => {
     // 這裡會把 env ('dev' 或 'prod') 傳給後端
     return request.get('/version/latest-success', { 
@@ -60,10 +59,42 @@ const getLatestSuccessVersion = (name , env) => {
     });
 }
 
+/**
+ * 查詢 dev 更新的下個版號
+ * @param 
+ */
+const getDevNextVersion = (name) => {
+    // 把 env ('dev') 傳給後端
+    return request.get('/version/next', { 
+        params: { 
+            projectName: name, 
+            env: "dev"
+        } 
+    });
+}
+
+/**
+ * 檢查是否能更新指定版號
+ * @param 
+ */
+const checkDeployable = (projectName, env, targetVersion) => {
+  return request.get(`/version/check-deployable`, {
+    params: { 
+        projectName: projectName, 
+        env: env,
+        targetVersion: targetVersion
+    } 
+  });
+}
+
+
+
 export {
     queryVersionPage,
     queryVersionById,
     deleteVersionById,
     editRemark,
-    getLatestSuccessVersion
+    getLatestSuccessVersion,
+    getDevNextVersion,
+    checkDeployable
 }

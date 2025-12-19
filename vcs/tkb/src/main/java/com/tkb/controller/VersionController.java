@@ -51,8 +51,7 @@ public class VersionController {
     public Result<String> nextVersion(String projectName, String env) {
         log.info("取得下個版號 專案 {} , 環境 {}" ,projectName , env);
 
-        String next = versionService.getNextVersion(projectName , env);
-        return Result.success(next);
+        return versionService.getNextVersion(projectName , env);
     }
 
 
@@ -69,6 +68,17 @@ public class VersionController {
         // 查不到會回傳 null
         return Result.success(version);
     }
+
+    @GetMapping("/check-deployable")
+    public Result<String> checkDeployable(
+            @RequestParam String projectName,
+            @RequestParam String env,
+            @RequestParam(required = false) String targetVersion
+    ) {
+        return versionService.checkdeployable(projectName, env, targetVersion);
+
+    }
+
 
 
     /**

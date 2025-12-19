@@ -93,6 +93,7 @@ public class VersionServiceImpl extends ServiceImpl<VersionMapper, VersionEntity
                 .last("LIMIT 1")
                 .one();
 
+
         //log.info("找出同環境的「上一個版本」 : {} ", lastVersion);
 
         // 2. 版本號比較
@@ -240,34 +241,65 @@ public class VersionServiceImpl extends ServiceImpl<VersionMapper, VersionEntity
      * @return
      */
     @Override
-    public String getNextVersion(String projectName, String env) {
-        VersionEntity lastVersion = this.lambdaQuery()
+    public Result<String> getNextVersion(String projectName, String env) {
+
+        // 1. 【優先檢查】是否有正在部屬中 (State = 0) 的紀錄
+        //  State = 0 表前端可能剛寫入了一筆指定版號
+        VersionEntity deployingVersion = this.lambdaQuery()
                 .eq(VersionEntity::getProjectName, projectName)
                 .eq(VersionEntity::getProjectEnv, env)
+                .eq(VersionEntity::getState, DeployState.DEPLOYING.getCode()) // 0 = Deploying
                 .orderByDesc(VersionEntity::getCreatedTime)
                 .last("LIMIT 1")
                 .one();
 
-        String newVersion = "undefined";
-
-        if (lastVersion != null) {
-            newVersion = VersionUtil.plusOne(lastVersion.getVersion());
+        if (deployingVersion != null) {
+            // 不做任何運算，直接回傳最新且 State 標記Deploying 的版號
+            log.info("發現正在部屬中的版號，直接返回: {}", deployingVersion.getVersion());
+            return Result.success(deployingVersion.getVersion());
         }
 
-        return newVersion;
+        // 2. 【原本邏輯】如果沒有 (State = 0 ) 等待建置的版本，就找最後一個成功的 (State = 1 ) 或失敗 (State = 2 )
+        VersionEntity lastSuccessVersion = this.lambdaQuery()
+                .eq(VersionEntity::getProjectName, projectName)
+                .eq(VersionEntity::getProjectEnv, env)
+                .in(VersionEntity::getState,
+                        DeployState.SUCCESS.getCode() ,   // 1 = Success
+                        DeployState.FAILED.getCode()      // 2 = Failed
+                )
+                .orderByDesc(VersionEntity::getCreatedTime)
+                .last("LIMIT 1")
+                .one();
 
+        // 上個版本 build (成功或失敗) 都直接進入下一版
+        if (lastSuccessVersion != null) {
+            String newVersion = VersionUtil.plusOne(lastSuccessVersion.getVersion());
+            return Result.success(newVersion);
+        }
+
+        // 3. 【新創建版本】state 都查詢不到表示該版號未收錄，做新增動作並且從 1.0.0 開始
+        VersionEntity initVersion = new VersionEntity();
+        initVersion.setProjectName(projectName);
+        initVersion.setProjectEnv(env);
+        initVersion.setVersion("1.0.0");
+
+        boolean save = this.save(initVersion);
+        if (save) {
+            return Result.success(initVersion.getVersion());
+        }
+        return Result.error("版本號無法獲取");
     }
 
     /**
-     * 取得 dev環境 最後一次成功的 版號
+     * 取得 prod/dev環境 最後一次成功的 版號
      * @param projectName
-     * @param dev
+     * @param env
      * @return
      */
     @Override
     public String getLastSuccessVersion(String projectName, String env) {
 
-        VersionEntity LastSuccessVersion = this.lambdaQuery()
+        VersionEntity lastSuccessVersion = this.lambdaQuery()
                 .eq(VersionEntity::getProjectName, projectName)
                 .eq(VersionEntity::getProjectEnv, env)
                 .eq(VersionEntity::getState, DeployState.SUCCESS.getCode())
@@ -275,10 +307,7 @@ public class VersionServiceImpl extends ServiceImpl<VersionMapper, VersionEntity
                 .last("LIMIT 1")
                 .one();
 
-        if ( LastSuccessVersion != null ) {
-            return LastSuccessVersion.getVersion();
-        }
-        return "null";
+        return lastSuccessVersion != null ? lastSuccessVersion.getVersion() : null;
     }
 
     @Override
@@ -310,10 +339,75 @@ public class VersionServiceImpl extends ServiceImpl<VersionMapper, VersionEntity
                 .update();
     }
 
+    /**
+     * 檢測 prod 環境是否能夠部屬
+     * @param projectName
+     * @param env
+     * @param targetVersion
+     * @return
+     */
+    @Override
+    public Result<String> checkdeployable(String projectName, String env , String targetVersion) {
+
+        // 1. 取得該專案在 Dev 和 Prod 的最新成功版號
+        String lastDevVer = this.getLastSuccessVersion(projectName, "dev");
+        String lastProdVer = this.getLastSuccessVersion(projectName, "prod");
+
+        // =====================
+        // 情境 A: 目標環境是 Dev
+        // =====================
+        if ("dev".equals(env)) {
+            // Dev 永遠可以在前面，回傳 OK
+            if ( targetVersion != null && !targetVersion.isEmpty()) {
+                // 1.0.1 - 1.0.0 > 0 才可更新
+                int i = compareVersions( targetVersion,lastDevVer );
+                if (i > 0) {
+                    return Result.success("Dev 環境允許更新");
+                }
+                return Result.error("非法操作: 目前 Dev 版號: " + lastDevVer + " 目標版本: " + targetVersion + " 不允許小於當前版本");
+            }
+        }
+
+        // =======================
+        // 情境 B: 目標環境是 Prod
+        // ======================
+        if ("prod".equals(env)) {
+
+            // 1. 如果 Dev 尚未有版號，Prod 無法部屬
+            if (lastDevVer == null) {
+                return Result.error("禁止部署：Dev 環境尚未有任何成功版本，無法部署 Prod");
+            }
+
+            // 2. 檢查：Dev 必須領先 Prod
+            // 如果 Prod 已經追上 Dev (相等)，代表沒有新功能可以發
+            if (lastProdVer != null && compareVersions(lastDevVer, lastProdVer) <= 0) {
+                return Result.error("無需更新：Prod (" + lastProdVer + ") 已與 Dev 同步，請先更新 Dev");
+            }
+
+            // 3. (如果有傳入 targetVersion) 檢查：Prod 不能超越 Dev
+            if (targetVersion != null) {
+                // 如果 想發的版號 > Dev最後版號 -> 違規
+                if (compareVersions(targetVersion, lastDevVer) > 0) {
+                    return Result.error("非法操作：目標版本 " + targetVersion + " 超前 Dev (" + lastDevVer + ")，請先部署 Dev");
+                }
+
+                // 檢查：Prod 必須是往前更新無法往回 (Target > Prod)
+                if (lastProdVer != null && compareVersions(targetVersion, lastProdVer) <= 0) {
+                    return Result.error("版本錯誤：目標版本必須大於當前 Prod 版本");
+                }
+            }
+
+            return Result.success("檢查通過：有新的 Dev 版本可供 Prod 更新");
+        }
+        return Result.error("未知環境設定");
+    }
+
 
     /**
-     * 比較兩個 x.x.x 格式的版本號。
-     * @return > 0 (v1 > v2), < 0 (v1 < v2), = 0 (v1 = v2)
+     * 版本號比較工具
+     * @param version1 版本1 (e.g. 1.0.1)
+     * @param version2 版本2 (e.g. 1.1.2)
+     * @return 正數: v1 > v2, 負數: v1 < v2, 0: 相等
      */
     private static int compareVersions(String version1, String version2) {
         // 假設版本格式已在前面檢查過 (x.x.x)
@@ -324,15 +418,15 @@ public class VersionServiceImpl extends ServiceImpl<VersionMapper, VersionEntity
         int length = Math.min(parts1.length, parts2.length);
 
         for (int i = 0; i < length; i++) {
-            int v1 = Integer.parseInt(parts1[i]);
-            int v2 = Integer.parseInt(parts2[i]);
+            int v1 = i < parts1.length ? Integer.parseInt(parts1[i]) : 0;
+            int v2 = i < parts2.length ? Integer.parseInt(parts2[i]) : 0;
 
             if (v1 != v2) {
                 return v1 - v2;
             }
         }
         // 如果前面部分都相同 (例如 1.0.0 vs 1.0.0.1)
-        // 根據您的需求，我們假設都是 x.x.x 格式，此處回傳 0
+        // 假設都是 x.x.x 格式，此處回傳 0
         return 0;
     }
 }

@@ -1,9 +1,11 @@
 <script setup>
 import { onMounted, ref , watch } from 'vue'
-import { queryVersionPage , queryVersionById , deleteVersionById  , editRemark , getLatestSuccessVersion} from "@/api/version";
+import { queryVersionPage , queryVersionById , deleteVersionById  , editRemark , getLatestSuccessVersion , getDevNextVersion , checkDeployable} from "@/api/version";
 import { triggerJenkinsBackendBuild } from "@/api/jenkins";
-import { ElMessage , ElMessageBox } from 'element-plus'
+import { deploying } from "@/api/deploy";
 
+import { ElMessage , ElMessageBox , ElLoading, sliderContextKey } from 'element-plus'
+import axios from 'axios';
 
 const token = ref ('');
 
@@ -63,10 +65,6 @@ const handleCurrentChange = (val) => {
 // ---------------- 版本數據列表 ----------------
 const multipleSelection = ref([]);
 
-// 監聽表格勾選事件 (Element Plus 自動傳入 val，即所有選中的行物件)
-const handleSelectionChange = (val) => {
-    multipleSelection.value = val;
-};
 
 // --------------------------------- 查詢歷史紀錄 ---------------------------------
 const search = async () => {
@@ -115,12 +113,77 @@ const versionForm = ref ({
     remark: ""
 })
 
+// 監聽表單中 env 變化
+watch(() => versionForm.value.env, async (newEnv) => {
+    
+    // 防呆：如果沒選專案，先不動作
+    if (!versionForm.value.name) return;
+    
+    const projectName = versionForm.value.name;
+
+    try {
+        // ===============
+        // 如選擇的是 Dev 
+        // ===============
+        if (newEnv === 'dev') {
+            // 呼叫 /next 接口，取得 Dev 的下一個版號 (e.g. 1.0.20 -> 1.0.21)
+            const res = await getDevNextVersion(projectName); // 假設這是您的 /api/version/next
+            if (res.code === 1) {
+                versionForm.value.version = res.data; // 自動填入 1.0.21
+                versionForm.value.branch = 'develop'; // 自動帶入分支
+            }
+        } 
+        // ================
+        // 如選擇的是 Prod
+        // ================
+        else if (newEnv === 'prod') {
+            // Prod 的版號來源，必須是 "Dev 最後成功的版本"
+            // 這裡發送請求查 Dev 的 latest-success
+            const devLatestRes = await getLatestSuccessVersion(projectName, 'dev');
+            const devVer = devLatestRes.data; //  1.0.20
+
+            if (!devVer) {
+                ElMessage.error("Dev 尚無版本，無法部署 Prod");
+                versionForm.value.version = '';
+                return;
+            }
+
+            // 防呆：檢查 Prod 是否已經跟上這個版本了
+            const prodLatestRes = await getLatestSuccessVersion(projectName, 'prod');
+            const prodVer = prodLatestRes.data; // 1.0.20 或 1.0.19
+
+            // 如果 Dev (1.0.20) == Prod (1.0.20)
+            if (prodVer && devVer === prodVer) {
+                ElMessageBox.alert(
+                    `目前 Prod 已是最新版本 (${prodVer})，與 Dev 同步。\n請先更新 Dev 環境後再執行此操作。`,
+                    '無法更新',
+                    { type: 'warning' }
+                );
+                // 清空版號，並建議讓確認按鈕 disable
+                versionForm.value.version = '';
+                return;
+            }
+
+            // 通過檢查，自動填入 Dev 的版號 (e.g. 1.0.20)
+            versionForm.value.version = devVer;
+            versionForm.value.branch = 'develop'; // Prod 通常固定分支
+            ElMessage.success(`已自動帶入 Dev 部屬成功版本: ${devVer}`);
+        }
+
+    } catch (e) {
+        console.error(e);
+    }
+});
 
 // 版號表單驗證規則
 const rules = {
     name: [{ required: true, message: "請選擇專案", trigger: "change" }],
     env: [{ required: true, message: "請選擇環境", trigger: "change" }],
-    branch: [{ required: true, message: "請輸入分支", trigger: "change" }]
+    branch: [{ required: true, message: "請輸入分支", trigger: "change" }],
+    version: [
+        { required: true, message: "請輸版號 格式: 1.0.0", trigger: "change" },
+        { pattern: /^[\d]{1}\.[\d]+\.[\d]+$/ , message: '請輸入有效的版號 範例: 1.0.0', trigger: 'blur'}
+    ]
 }
 
 // 版號表單初始化
@@ -191,6 +254,12 @@ const handleDelete = async (row) => {
     })
 }
 
+// -------------------------------------------------------------------------------
+// 批量移除操作 監聽表格勾選事件 (Element Plus 自動傳入 val，即所有選中的行物件)
+const handleSelectionChange = (val) => {
+    multipleSelection.value = val;
+};
+
 // 批量移除操作
 const handleBatchDelete = async () => {
 
@@ -229,6 +298,18 @@ const handleBatchDelete = async () => {
 }
 
 
+// 輔助函數：將 Jenkins 回傳的絕對路徑轉為 Proxy 相對路徑
+const getQueueApiUrl = (absoluteUrl) => {
+    // 假設後端回傳的是 http://192.168.1.35:8088/queue/item/319/
+    // 需要把它變成 /jenkins-proxy/queue/item/319/api/json
+    // 使用正則表達式去掉 http://IP:PORT 部分
+    const relativePath = absoluteUrl.replace(/^http:\/\/[^/]+/, '');
+    // 確保路徑乾淨並加上 api/json
+    return `/jenkins-proxy${relativePath.replace(/\/$/, '')}/api/json`;
+};
+
+// 輔助函數：延遲 (Sleep)
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 // 確認 版號表單 ( 新增 、 修改 )
 const submitVersionAddandEdit = async () => {
@@ -260,45 +341,140 @@ const submitVersionAddandEdit = async () => {
                     type: 'warning', // 跳出的樣式 
                     customClass: 'glass-confirm' // 自定義樣式類名
                 }).then(async () => {
-                    //ElMessage.success("新增")
-                    console.log("新增");
+                    // 1. 開啟全螢幕 Loading，防止使用者重複點擊
+                    const loadingInstance = ElLoading.service({
+                        lock: true,
+                        text: '正在進行版本檢查與部署請求...',
+                        background: 'rgba(0, 0, 0, 0.7)',
+                    });
+                    let recordId = null;
 
-                    const projectName = versionForm.value.name
+                    try{
+                        // 解構賦值
+                        const { name: projectName, env: projectEnv, version } = versionForm.value;
+                        
+                        // ==============================
+                        // 步驟 1: 檢查是否可部署 (Check)
+                        // =============================
+                        const checkResult = await checkDeployable(projectName, projectEnv, version);
+                        console.log('checkDeployable API回傳結果:', checkResult);
 
-                    const [devRes, prodRes] = await Promise.all([
-                        getLatestSuccessVersion(projectName , 'dev'),
-                        getLatestSuccessVersion(projectName , 'prod')
-                    ]);
+                        if (!checkResult.code) {
+                            throw new Error(checkResult.msg || "版號未通過檢查，請確認版本規則");
+                        }
 
-                    const devVer = devRes.data; 
-                    const prodVer = prodRes.data; 
-                    console.log(`devVer= ` + devVer , "prodVer" + prodVer);
+                        // ====================================
+                        // 步驟 2: 標記部署狀態 (Mark Deploying)
+                        // ====================================
 
-                    // 2. 版本比對 (Guard Clauses)
-                    // 如果 Prod 已經有這個版本 (且不為 null)，則禁止更新
-                    if (prodVer && devVer === prodVer) {
-                        ElMessage.warning(`禁止更新：Prod 環境已是最新版本 (${prodVer})`);
-                        return; // ⛔️ 中斷，不執行 Jenkins
+                        // 構建 DTO (Data Transfer Object)
+                        const deployParams = {
+                            projectName,
+                            projectEnv,
+                            version,
+                            user: 'Web-UI',
+                        };
+                        const deployResult = await deploying(deployParams);
+                        console.log('deploying API回傳結果:', deployResult);
+
+                        
+                        if (!deployResult.code) {
+                            throw new Error(deployResult.msg || "無法標記部署狀態");
+                        }
+                        recordId = deployResult.data;
+                        console.log('部署紀錄 ID:', recordId);
+
+                        versionForm.value.id = recordId;
+                        const editRemarkResult = await editRemark(versionForm.value);
+                        console.log('部署備註編輯結果:', editRemarkResult);
+
+                        // ElMessage.success("通過版號檢查並標記部署狀態");
+
+                        // ==========================================
+                        // 步驟 3: 觸發 Jenkins (Trigger Jenkins)
+                        // ==========================================
+                        const jenkinsResult = await triggerJenkinsBackendBuild(projectName , projectEnv , versionForm.value.branch )
+
+                        if (jenkinsResult.status !== 201) {
+                            throw new Error(jenkinsResult.msg || "Jenkins 觸發失敗");
+                        }
+
+                        // 更新 Loading 文字
+                        loadingInstance.setText('請求發送成功，等待 Jenkins 排程...');
+                        //ElMessage.success('Jenkins 部署請求發送成功！');
+
+                        // ==========================================
+                        // 步驟 4: 輪詢 Queue 直到拿到 Build Number
+                        // ==========================================
+                        const queueLocation = jenkinsResult.headers['location'];
+                        console.log('Queue URL:', queueLocation);
+
+                        if (!queueLocation) throw new Error("Jenkins 未回傳 Queue 位置");
+
+                        let buildNumber = null;
+                        let attempts = 0;
+                        const maxAttempts = 30; // 最大嘗試次數 (例如 30次 * 2秒 = 60秒)
+
+
+                        // 開始輪詢
+                        while (!buildNumber && attempts < maxAttempts) {
+                            attempts++;
+                            loadingInstance.setText(`等待 Jenkins 執行中... (${attempts}/${maxAttempts})`);
+                            
+                            try {
+                                const queueApiUrl = getQueueApiUrl(queueLocation);
+                                // 帶上 Auth Header
+                                const qRes = await axios.get(queueApiUrl, {
+                                    auth: { username: "admin", password: "11a7af399de1d45513f9eb13e394ebe1f9" } 
+                                });
+
+                                if (qRes.data.executable && qRes.data.executable.number) {
+                                    buildNumber = qRes.data.executable.number;
+                                } else if (qRes.data.cancelled) {
+                                    throw new Error("部署任務在 Jenkins 佇列中被取消");
+                                } else {
+                                    // 還沒開始，等待 2 秒再試
+                                    await sleep(2000);
+                                }
+                            } catch (qErr) {
+                                console.warn("查詢 Queue 失敗，稍後重試", qErr);
+                                await sleep(2000); // 失敗也等待一下
+                            }
+                        }
+
+                        if (!buildNumber) {
+                            throw new Error("等待 Jenkins 建置超時，請稍後檢查 Jenkins 狀態");
+                        }
+
+                        // ========================
+                        // 成功拿到 Build Number
+                        // ========================
+                        console.log(`Jenkins 建置開始！Build ID: ${buildNumber}`);
+                        ElMessage.success(`部署成功啟動！Jenkins Build #${buildNumber}`);
+                        
+
+                        addDialogVisible.value = false;
+                        search()
+
+
+                    } catch (error) {
+                        console.error('部署流程發生錯誤:', error);
+
+                        if (recordId) {
+                            try {
+                                const deleteDeployRecordId = await deleteVersionById(recordId);
+                                console.log('部署紀錄 ID ' + deleteDeployRecordId + ' 已刪除 (回滾)');
+                            } catch (deleteError) {
+                                console.error('回滾刪除失敗:', deleteError);
+                            }
+                        }
+
+                        ElMessage.error(error.message || "系統發生未預期錯誤，請稍後再試");
+                        search()
+                    } finally {
+                        // 無論成功或失敗，最後要關閉 Loading
+                        loadingInstance.close();
                     }
-
-                    // 防止異常：Prod 版本比 Dev 還大
-                    if (prodVer && prodVer > devVer) {
-                            ElMessage.error(`版本異常：Prod (${prodVer}) 高於 Dev (${devVer})，請檢查！`);
-                            return; // ⛔️ 中斷
-                    }
-                    
-                    // 3. 通過檢查，執行 Jenkins 部署
-                    ElMessage.success("檢查通過，開始請求部署...");
-
-                    // const result = await triggerJenkinsBackendBuild(versionForm.value.name , versionForm.value.env , versionForm.value.branch )
-                    // if ( result.code ) {
-                    //      ElMessage.success('正在部屬');
-                    //      search(); 
-                    // } else {
-                    //      ElMessage.error('部屬失敗:' + result.msg);
-                    // }
-                    addDialogVisible.value = false;
-                    search()
                 }).catch(() => {
                     ElMessage.info('已取消');
                 })
@@ -307,8 +483,6 @@ const submitVersionAddandEdit = async () => {
         } else {
             ElMessage.error("表單驗證未通過 .... 請重新確認")
         }
-
-
     })
 }
 
@@ -427,6 +601,10 @@ onMounted (() => {
                 <el-select v-model="versionForm.env" style="width:50%">
                     <el-option v-for="e in projectEnvOptions" :key="e.value" :label="e.label" :value="e.value" />
                 </el-select>
+            </el-form-item>
+
+            <el-form-item label="版號" prop="version">
+                <el-input v-model="versionForm.version" placeholder="" style="width:50%"/>
             </el-form-item>
 
             <el-form-item label="分支" prop="branch">
