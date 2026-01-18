@@ -7,6 +7,7 @@ import com.tkb.entity.UserEntity;
 import com.tkb.mapper.UserMapper;
 import com.tkb.service.UserService;
 import com.tkb.utils.JwtUtils;
+import com.tkb.vo.LoginVO;
 import com.tkb.vo.PageBean;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,7 +23,7 @@ import java.util.Map;
 public class UserServiceImpl extends ServiceImpl<UserMapper, UserEntity> implements UserService {
 
     @Override
-    public String login(String username , String password) {
+    public LoginVO login(String username , String password) {
         UserEntity authUser = this.lambdaQuery()
                 .eq(UserEntity::getUsername, username)
                 .eq(UserEntity::getPassword, password)
@@ -35,10 +36,16 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserEntity> impleme
             map.put("username", authUser.getUsername());
 
             String jwt = JwtUtils.generateJWT(map); // jwt 包含當前員工登入的訊息
-            return jwt;
+
+            LoginVO loginVO = new LoginVO();
+            loginVO.setId(authUser.getId());
+            loginVO.setUsername(authUser.getUsername());
+            loginVO.setRole(authUser.getRole());
+            loginVO.setToken(jwt);
+            return loginVO;
         }
 
-        return "未找到" + username + "該用戶";
+        return new LoginVO();
     }
 
     @Override
@@ -46,7 +53,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserEntity> impleme
         PageHelper.startPage(page, pageSize);
 
         List<UserEntity> list = this.lambdaQuery()
-                .like(UserEntity::getUsername, name)
+                .like(name != null && !name.isEmpty() , UserEntity::getUsername, name)
                 .list();
 
         Page<UserEntity> pageList = (Page<UserEntity>) list;

@@ -12,6 +12,7 @@ import {
 const router = useRouter();
 const route = useRoute(); // 用於監聽路由變化
 const currentUser = ref('');
+const currentRole = ref('');
 // 請求部門列表或版本歷史
 const fetchData = () => {
     console.log('--- 數據正在被請求/刷新中 ---');
@@ -32,8 +33,9 @@ const menuItems = [
     },
     { 
         name: '系統', path: '/system', icon: Menu, children: [
-            { name: '狀態監控', path: '/system/monitor', icon: TrendCharts }, 
-            { name: '流量切換', path: '/system/switch', icon: TrendCharts }, 
+            { name: '狀態監控', path: '/system/monitor', icon: TrendCharts },
+            { name: '日誌查詢', path: '/system/log_query', icon: TrendCharts },
+            { name: '日誌智能分析', path: '/system/log', icon: TrendCharts }, 
         ]
     },
     { 
@@ -50,6 +52,12 @@ const toggleMenu = (path) => {
     expandedMenus.value[path] = !expandedMenus.value[path];
 };
 
+
+// 密碼修改
+// const changePassword = () => {
+
+// }
+
 const logout = () => {
     ElMessageBox.confirm('確定要登出系統嗎?', '登出確認', {
         confirmButtonText: '確認登出',
@@ -58,6 +66,8 @@ const logout = () => {
         customClass: 'glass-confirm' // 自定義樣式類名
     }).then(()  => { 
         localStorage.removeItem('current_username'); 
+        localStorage.removeItem('current_id'); 
+        localStorage.removeItem('current_role'); 
         localStorage.removeItem('jwt_token'); 
         ElMessage.success('您已安全登出');
         router.push("/login");
@@ -87,9 +97,13 @@ const handleToggle = () => {
   toggleTheme(isDark.value);
 };
 
+
+
+
 onMounted(() => {
     console.log('--- 組件首次創建完成 ---');
     currentUser.value = localStorage.getItem('current_username') || 'Admin';
+    currentRole.value = localStorage.getItem('current_role') ;
     // 預設展開當前激活的父菜單
     menuItems.forEach(item => {
         if (item.children && isActive(item.path)) {
@@ -156,7 +170,7 @@ onMounted(() => {
             <el-avatar :size="36" class="user-avatar">{{ currentUser.charAt(0).toUpperCase() }}</el-avatar>
             <div class="user-info">
                 <span class="username">{{ currentUser }}</span>
-                <span class="role">管理員</span>
+                <span class="role">{{ currentRole == 'ADMIN' ? "管理員" : "一般使用者"}}</span>
             </div>
         </div>
       </div>
@@ -176,10 +190,11 @@ onMounted(() => {
                     切換主題
             </button>
 
-          <button class="action-btn">
+          <!-- <button class="action-btn" @click="changePassword">
             <el-icon><EditPen /></el-icon>
             <a>修改密碼</a>
-          </button>
+          </button> -->
+
           <div class="divider"></div>
           <button class="action-btn logout-btn" @click="logout">
             <el-icon><SwitchButton/></el-icon>

@@ -73,4 +73,6 @@ public interface VersionService extends IService<VersionEntity> {
      * @return
      */
     Result<String> checkdeployable(String projectName, String env , String targetVersion);
+
+    Boolean  updateJenkinsBuildById(VersionEntity versionEntity);
 }

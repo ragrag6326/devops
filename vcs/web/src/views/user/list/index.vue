@@ -1,11 +1,30 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, computed } from 'vue' // [修改] 引入 computed
 import { queryUserPage, addUserApi, updateUserApi, deleteUserApi  } from '@/api/user'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { EditPen, Delete } from '@element-plus/icons-vue'
 
-// token（如果之後請求要帶可以用）
+// token
 const token = ref('')
+
+// --- [修改] 當前登入使用者的資訊 ---
+// 在實際專案中，這些資訊通常來自 Pinia store 或解析 JWT token
+const currentUser = ref({
+  id: null,
+  username: '',
+  role: '' 
+})
+
+// --- [修改] 判斷是否為管理員 ---
+const isAdmin = computed(() => {
+  return currentUser.value.role === 'ADMIN'
+})
+
+// --- [修改] 判斷是否有權限編輯某一行 ---
+// 規則：是管理員 OR 該行ID等於當前使用者ID
+const canEdit = (row) => {
+  return isAdmin.value || row.id == currentUser.value.id
+}
 
 // ---------- 搜索表單 ----------
 const searchUserForm = ref({
@@ -27,8 +46,6 @@ const search = async () => {
       currentPage.value,
       pageSize.value
     )
-    console.log('queryUserPage result:', result)
-
     if (result && result.code) {
       userList.value = result.data.rows || []
       totalPage.value = result.data.total || 0
@@ -41,12 +58,10 @@ const search = async () => {
   }
 }
 
-// 清空搜尋表單
 const clear = () => {
   for (const key in searchUserForm.value) {
     searchUserForm.value[key] = ''
   }
-  // 可選：清空後重新查詢
   search()
 }
 
@@ -70,27 +85,25 @@ const userForm = ref({
   id: '',
   username: '',
   name: '',
-  password: ''
+  password: '',
+  role: 'USER' // 預設值
 })
 
-// 打開「新增」對話框
+// [修改] 只有 ADMIN 可以呼叫此函數
 const addUser = () => {
   formTitle.value = '新增使用者'
-
-  // 清空表單
   for (const key in userForm.value) {
     userForm.value[key] = ''
   }
-
-  // 重置表單驗證
+  // 預設角色
+  userForm.value.role = 'USER'
+  
   if (userFormRef.value) {
     userFormRef.value.resetFields()
   }
-
   addDialogVisible.value = true
 }
 
-// 表單驗證規則
 const rules = {
   username: [
     { required: true, message: '請輸入使用者名', trigger: 'blur' },
@@ -101,7 +114,6 @@ const rules = {
       required: true,
       message: '請輸入密碼',
       trigger: 'blur',
-      // 只有新增時必填，編輯時可以略過
       validator: (rule, value, callback) => {
         if (!userForm.value.id && !value) {
           callback(new Error('請輸入密碼'))
@@ -110,17 +122,16 @@ const rules = {
         }
       }
     },
-    { min: 6, max: 20, message: '密碼長度在 6 到 20 個字符', trigger: 'blur' }
+    { min: 5, max: 20, message: '密碼長度在 6 到 20 個字符', trigger: 'blur' }
   ]
 }
 
-// 送出表單（新增 / 修改）
 const submitUser = async () => {
   if (!userFormRef.value) return
 
   userFormRef.value.validate(async (valid) => {
     if (!valid) {
-      ElMessage.error('表單驗證未通過，請重新確認')
+      ElMessage.error('表單驗證未通過')
       return
     }
 
@@ -135,7 +146,7 @@ const submitUser = async () => {
           ElMessage.error('使用者修改失敗: ' + result.msg)
         }
       } else {
-        // 新增
+        // 新增 (只有 Admin 能做，後端也應驗證)
         result = await addUserApi(userForm.value)
         if (result.code) {
           ElMessage.success('新增使用者成功')
@@ -143,41 +154,48 @@ const submitUser = async () => {
           ElMessage.error('新增使用者失敗: ' + result.msg)
         }
       }
-
       addDialogVisible.value = false
       search()
     } catch (e) {
       console.error(e)
-      ElMessage.error('操作失敗，請稍後再試')
+      ElMessage.error('操作失敗')
     }
   })
 }
 
-// ----------------- 編輯使用者 -----------------
 const handleEdit = (row) => {
+  // [修改] 前端再次防護：如果不是 Admin 且不是本人，擋住
+  if (!canEdit(row)) {
+    ElMessage.warning('無權限編輯此使用者')
+    return
+  }
+
   formTitle.value = '編輯使用者'
+  //Object.assign(userForm.value, row)
+  // for (const key in userForm.value) {
+  //   userForm.value[key] = ''
+  // }  
 
-  // 先清空再塞入，避免殘留舊值
-  for (const key in userForm.value) {
-    userForm.value[key] = ''
-  }
-  Object.assign(userForm.value, row)
+  userForm.value.username = row.username
+  userForm.value.password = ''
+  userForm.value.name = row.name
+  userForm.value.id = row.id
+  userForm.value.role = currentUser.value.role
 
-  if (userFormRef.value) {
-    userFormRef.value.clearValidate()
-  }
 
+  // if (userFormRef.value) {
+  //   userFormRef.value.clearValidate()
+  // }
   addDialogVisible.value = true
 }
 
 // ----------------- 刪除使用者 -----------------
 const selectedUsers = ref([])
 
-// 單筆刪除
 const handleDelete = (user) => {
   ElMessageBox.confirm(`此操作將永久刪除 "${user.name}" 使用者，是否繼續?`, '提示', {
-    cancelButtonText: '取消',
     confirmButtonText: '確定刪除',
+    cancelButtonText: '取消',
     type: 'warning'
   }).then(async () => {
     try {
@@ -189,29 +207,23 @@ const handleDelete = (user) => {
         ElMessage.error('刪除失敗: ' + result.msg)
       }
     } catch (e) {
-      console.error(e)
       ElMessage.error('刪除失敗')
     }
-  }).catch(() => {
-    ElMessage.info('已取消刪除')
-  })
+  }).catch(() => {})
 }
 
-// 多選變化
 const selectionChange = (selection) => {
   selectedUsers.value = selection.map((u) => u.id)
 }
 
-// 批量刪除
 const deleteUsers = () => {
   if (!selectedUsers.value || selectedUsers.value.length === 0) {
     ElMessage.warning('請先勾選要刪除的使用者')
     return
   }
-
   ElMessageBox.confirm(`此操作將永久刪除選中的使用者，是否繼續?`, '提示', {
-    cancelButtonText: '取消',
     confirmButtonText: '確定刪除',
+    cancelButtonText: '取消',
     type: 'warning'
   }).then(async () => {
     try {
@@ -223,47 +235,50 @@ const deleteUsers = () => {
         ElMessage.error('刪除失敗: ' + result.msg)
       }
     } catch (e) {
-      console.error(e)
       ElMessage.error('刪除失敗')
     }
-  }).catch(() => {
-    ElMessage.info('已取消刪除')
-  })
+  }).catch(() => {})
 }
 
-// 清空整個新增/編輯表單（dialog 裡的「清除表單」按鈕）
 const resetUserForm = () => {
-  for (const key in userForm.value) {
-    userForm.value[key] = ''
-  }
+
+  // userForm.value
+  // for (const key in userForm.value) {
+  //   userForm.value[key] = ''
+  // }
+  userForm.value.password = ''
+
   if (userFormRef.value) {
     userFormRef.value.resetFields()
   }
 }
 
-// 取得 token（如果未來需要帶在 header 可以從這裡取）
-const getToken = () => {
+// [修改] 取得當前使用者資訊
+const getCurrentUserInfo = () => {
+  //  localStorage 存 user 物件
+  const storedUser = localStorage.getItem('current_username')
+  const storedRole = localStorage.getItem('current_role')
+  const storedId = localStorage.getItem('current_id')
+  currentUser.value = { id: storedId , username: storedUser , role: storedRole } 
+
   token.value = localStorage.getItem('jwt_token') || ''
 }
 
-// 初始化
 onMounted(() => {
-  getToken()
   search()
+  getCurrentUserInfo() // [修改] 初始化使用者身分
 })
 </script>
 
 
 <template>
-  <h1>使用者管理</h1>
+  <h1>使用者管理 (目前身分: {{ currentUser.role }})</h1>
 
-  <!-- 搜索欄 -->
   <div class="container">
     <el-form :inline="true" :model="searchUserForm" class="demo-form-inline">
-      <el-form-item label="使用者名稱">
-        <el-input v-model="searchUserForm.name" placeholder="請輸入姓名" clearable />
+      <el-form-item label="使用者帳號">
+        <el-input v-model="searchUserForm.name" placeholder="請輸入帳號" clearable />
       </el-form-item>
-
       <el-form-item>
         <el-button type="primary" @click="search">查詢</el-button>
         <el-button type="info" @click="clear">清空</el-button>
@@ -271,17 +286,17 @@ onMounted(() => {
     </el-form>
   </div>
 
-  <!-- 新增 、批量刪除 -->
-  <div class="container">
+  <div class="container" v-if="isAdmin">
     <el-button type="primary" @click="addUser">新增使用者</el-button>
     <el-button type="danger" @click="deleteUsers">批量刪除</el-button>
   </div>
 
-  <!-- 使用者列表 -->
   <div class="table-container">
     <el-table :data="userList" style="width: 100%" class="custom-table" @selection-change="selectionChange">
-      <el-table-column type="selection" width="50" align="center" />
-      <el-table-column type="index" label="編號" width="80" align="center" />
+      
+      <el-table-column v-if="isAdmin" type="selection" width="50" align="center" />
+      
+      <el-table-column prop="id" label="編號" width="80" align="center" />
       <el-table-column prop="username" label="帳號" width="150" align="center" />
       <el-table-column prop="name" label="姓名" width="150" align="center" />
 
@@ -294,13 +309,26 @@ onMounted(() => {
       </el-table-column>
 
       <el-table-column prop="createdTime" label="創建時間" min-width="180" align="center"/>
+      <el-table-column prop="updatedTime" label="修改時間" min-width="180" align="center"/>
 
       <el-table-column label="操作" min-width="180" align="center">
         <template #default="scope">
-          <el-button size="small" type="primary" @click="handleEdit(scope.row)">
+          
+          <el-button 
+            v-if="canEdit(scope.row)" 
+            size="small" 
+            type="primary" 
+            @click="handleEdit(scope.row)"
+          >
             <el-icon><EditPen /></el-icon> 編輯
           </el-button>
-          <el-button size="small" type="danger" @click="handleDelete(scope.row)">
+
+          <el-button 
+            v-if="isAdmin" 
+            size="small" 
+            type="danger" 
+            @click="handleDelete(scope.row)"
+          >
             <el-icon><Delete /></el-icon> 刪除
           </el-button>
         </template>
@@ -314,7 +342,6 @@ onMounted(() => {
     </el-table>
   </div>
 
-  <!-- 分頁 -->
   <div class="page-container">
     <el-pagination
       v-model:current-page="currentPage"
@@ -329,8 +356,8 @@ onMounted(() => {
     />
   </div>
 
-  <!-- 新增 / 編輯 使用者 dialog -->
   <el-dialog v-model="addDialogVisible" :title="formTitle">
+    <!-- {{userForm}} -->
     <el-form
       :model="userForm"
       :rules="rules"
@@ -340,7 +367,11 @@ onMounted(() => {
       <el-row>
         <el-col :span="12">
           <el-form-item label="使用者名稱" prop="username">
-            <el-input v-model="userForm.username" placeholder="請輸入用戶名" />
+            <el-input 
+              v-model="userForm.username" 
+              placeholder="請輸入用戶名" 
+              :disabled="!!userForm.id && !isAdmin" 
+            />
           </el-form-item>
         </el-col>
 
@@ -351,8 +382,7 @@ onMounted(() => {
         </el-col>
       </el-row>
 
-      <!-- 只有新增時顯示密碼欄位 -->
-      <el-row v-if="!userForm.id">
+      <el-row v-if="userForm.id || isAdmin || userForm.id === currentUser.id">
         <el-col :span="12">
           <el-form-item label="密碼" prop="password">
             <el-input
@@ -363,10 +393,19 @@ onMounted(() => {
             />
           </el-form-item>
         </el-col>
+        
+        <el-col :span="12">
+          <el-form-item label="角色" prop="role" v-if="isAdmin">
+            <el-select v-model="userForm.role" placeholder="請選擇身分">
+              <el-option label="ADMIN" value="ADMIN" />
+              <el-option label="USER" value="USER" />
+            </el-select>
+          </el-form-item>
+        </el-col>
       </el-row>
 
       <el-form-item>
-        <el-button type="danger" @click="resetUserForm">清除表單</el-button>
+        <el-button type="danger" @click="resetUserForm">清除</el-button>
       </el-form-item>
     </el-form>
 
@@ -380,6 +419,7 @@ onMounted(() => {
     </template>
   </el-dialog>
 </template>
+
 
 <style scoped>
 

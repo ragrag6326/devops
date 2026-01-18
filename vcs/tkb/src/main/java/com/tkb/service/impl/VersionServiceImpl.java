@@ -121,12 +121,13 @@ public class VersionServiceImpl extends ServiceImpl<VersionMapper, VersionEntity
         // 4. 同步 GitLab 資料 (確保資料庫最新)
         gitlabMrService.syncFromGitlab(projectName);
 
-        // 5. 【注意】設定要查詢的 Target Branc 不管是測試還是正式，功能說明都在 'develop'
+        // 5. 【注意】設定要查詢的 Target Branch 不管是測試還是正式，功能說明都在 'develop'
         String targetBranchToQuery = "develop";
         // 只有 Hotfix 的情況才會進 main，才需要額外處理 main分支 ，但一般正常流程，查詢 develop 區間即可涵蓋 Release 分支的內容。
 
         // 6. 查詢 MR
-        // select * from <gitlab_merge_requests> where projectName = ? and projectEnv = ? and merged_at > start and merged_at < end order by merged_at
+        // select * from vcs.gitlab_merge_requests where project_name = 'tkbtv' and state = 'merged' and released_prod = false and released_dev = true order by merged_at
+        // 已不判斷分支來源 指判斷，rel
         List<GitlabMrEntity> mergedMrs = gitlabMrService.getMergedMrsBetween(
                 projectName,
                 targetBranchToQuery, // 查看 develop
@@ -259,13 +260,14 @@ public class VersionServiceImpl extends ServiceImpl<VersionMapper, VersionEntity
             return Result.success(deployingVersion.getVersion());
         }
 
-        // 2. 【原本邏輯】如果沒有 (State = 0 ) 等待建置的版本，就找最後一個成功的 (State = 1 ) 或失敗 (State = 2 )
+        // 2. 【原本邏輯】如果沒有 (State = 0 ) 等待建置的版本，就找最後一個成功的 (State = 1 ) 或失敗 (State = 2 ) 回滾 (State = 3 )
         VersionEntity lastSuccessVersion = this.lambdaQuery()
                 .eq(VersionEntity::getProjectName, projectName)
                 .eq(VersionEntity::getProjectEnv, env)
                 .in(VersionEntity::getState,
                         DeployState.SUCCESS.getCode() ,   // 1 = Success
-                        DeployState.FAILED.getCode()      // 2 = Failed
+                        DeployState.FAILED.getCode(),      // 2 = Failed
+                        DeployState.ROLLED_BACK.getCode()  // 3 = roll back
                 )
                 .orderByDesc(VersionEntity::getCreatedTime)
                 .last("LIMIT 1")
@@ -297,6 +299,7 @@ public class VersionServiceImpl extends ServiceImpl<VersionMapper, VersionEntity
      * @return
      */
     @Override
+    @Deprecated
     public String getLastSuccessVersion(String projectName, String env) {
 
         VersionEntity lastSuccessVersion = this.lambdaQuery()
@@ -307,7 +310,11 @@ public class VersionServiceImpl extends ServiceImpl<VersionMapper, VersionEntity
                 .last("LIMIT 1")
                 .one();
 
-        return lastSuccessVersion != null ? lastSuccessVersion.getVersion() : null;
+        if (lastSuccessVersion != null) {
+            return  VersionUtil.plusOne(lastSuccessVersion.getVersion());
+        }
+
+        return null ;
     }
 
     @Override
@@ -350,8 +357,8 @@ public class VersionServiceImpl extends ServiceImpl<VersionMapper, VersionEntity
     public Result<String> checkdeployable(String projectName, String env , String targetVersion) {
 
         // 1. 取得該專案在 Dev 和 Prod 的最新成功版號
-        String lastDevVer = this.getLastSuccessVersion(projectName, "dev");
-        String lastProdVer = this.getLastSuccessVersion(projectName, "prod");
+        String lastDevVer = this.getNextVersion(projectName, "dev").getData();
+        String lastProdVer = this.getNextVersion(projectName, "prod").getData();
 
         // =====================
         // 情境 A: 目標環境是 Dev
@@ -359,9 +366,9 @@ public class VersionServiceImpl extends ServiceImpl<VersionMapper, VersionEntity
         if ("dev".equals(env)) {
             // Dev 永遠可以在前面，回傳 OK
             if ( targetVersion != null && !targetVersion.isEmpty()) {
-                // 1.0.1 - 1.0.0 > 0 才可更新
+                // 1.0.1 - 1.0.1 >= 0 才可更新
                 int i = compareVersions( targetVersion,lastDevVer );
-                if (i > 0) {
+                if (i >= 0) {
                     return Result.success("Dev 環境允許更新");
                 }
                 return Result.error("非法操作: 目前 Dev 版號: " + lastDevVer + " 目標版本: " + targetVersion + " 不允許小於當前版本");
@@ -380,26 +387,35 @@ public class VersionServiceImpl extends ServiceImpl<VersionMapper, VersionEntity
 
             // 2. 檢查：Dev 必須領先 Prod
             // 如果 Prod 已經追上 Dev (相等)，代表沒有新功能可以發
-            if (lastProdVer != null && compareVersions(lastDevVer, lastProdVer) <= 0) {
-                return Result.error("無需更新：Prod (" + lastProdVer + ") 已與 Dev 同步，請先更新 Dev");
-            }
+//            if (lastProdVer != null && compareVersions(lastDevVer, lastProdVer) <= 0) {
+//                return Result.error("無需更新：Prod (" + lastProdVer + ") 已與 Dev 同步，請先更新 Dev");
+//            }
 
             // 3. (如果有傳入 targetVersion) 檢查：Prod 不能超越 Dev
-            if (targetVersion != null) {
+            if (targetVersion != null && !targetVersion.isEmpty()) {
                 // 如果 想發的版號 > Dev最後版號 -> 違規
-                if (compareVersions(targetVersion, lastDevVer) > 0) {
-                    return Result.error("非法操作：目標版本 " + targetVersion + " 超前 Dev (" + lastDevVer + ")，請先部署 Dev");
-                }
+                //if (compareVersions(targetVersion, lastDevVer) > 0) {
+                //    return Result.error("非法操作：目標版本 " + targetVersion + " 超前 Dev (" + lastDevVer + ")，請先部署 Dev");
+                //}
 
-                // 檢查：Prod 必須是往前更新無法往回 (Target > Prod)
-                if (lastProdVer != null && compareVersions(targetVersion, lastProdVer) <= 0) {
-                    return Result.error("版本錯誤：目標版本必須大於當前 Prod 版本");
+                // 檢查：Prod 必須是往前更新無法往回 (Target > Prod) 1.0.8 - 1.0.8 >= 0 才可更新
+                if (lastProdVer != null && compareVersions( targetVersion,lastProdVer ) >= 0) {
+                    return Result.success("檢查通過：有新的 Dev 版本可供 Prod 更新");
                 }
             }
-
-            return Result.success("檢查通過：有新的 Dev 版本可供 Prod 更新");
+            return Result.error("版本錯誤：目標版本: "+ targetVersion + " 必須大於當前 Prod 版本 " + lastProdVer);
         }
         return Result.error("未知環境設定");
+    }
+
+
+    @Override
+    public Boolean updateJenkinsBuildById(VersionEntity versionEntity) {
+
+        return this.lambdaUpdate()
+                .set(VersionEntity::getJenkinsBuildId, versionEntity.getJenkinsBuildId())
+                .eq(VersionEntity::getId, versionEntity.getId())
+                .update();
     }
 
 

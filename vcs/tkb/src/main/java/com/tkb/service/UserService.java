@@ -3,10 +3,11 @@ package com.tkb.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.tkb.entity.UserEntity;
+import com.tkb.vo.LoginVO;
 import com.tkb.vo.PageBean;
 
 public interface UserService extends IService<UserEntity> {
-    String login(String username, String password);
+    LoginVO login(String username, String password);
 
     /**
      * 分頁查詢用戶

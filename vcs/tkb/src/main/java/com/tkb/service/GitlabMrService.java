@@ -67,4 +67,7 @@ public interface GitlabMrService extends IService<GitlabMrEntity> {
      * @param version
      */
     Boolean markReleaseProd(String projectName, String version);
+
+
+    List<GitlabMrEntity> getMrsPending(String projectName);
 }

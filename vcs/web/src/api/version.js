@@ -63,12 +63,12 @@ const getLatestSuccessVersion = (name , env) => {
  * 查詢 dev 更新的下個版號
  * @param 
  */
-const getDevNextVersion = (name) => {
-    // 把 env ('dev') 傳給後端
+const getNextVersion = (name , env) => {
+    // 把 env ('') 傳給後端
     return request.get('/version/next', { 
         params: { 
             projectName: name, 
-            env: "dev"
+            env: env
         } 
     });
 }
@@ -87,6 +87,15 @@ const checkDeployable = (projectName, env, targetVersion) => {
   });
 }
 
+/** 
+ * 新增JenkinsBuildId 
+ * @param {object} params 版本資訊實體類
+ * @param {number} params.id 主鍵 ID
+ * @param {string} params.jenkinsBuildId Jenkins BuildID
+ */
+export function updateJenkinsBuildId(params) {
+  return request.post(`/version/updateBuildId`, params);
+}
 
 
 export {
@@ -95,6 +104,6 @@ export {
     deleteVersionById,
     editRemark,
     getLatestSuccessVersion,
-    getDevNextVersion,
+    getNextVersion,
     checkDeployable
 }

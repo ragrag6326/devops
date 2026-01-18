@@ -9,6 +9,9 @@ import LoginView from '../views/login/index.vue'
 // 監控模塊
 import MonitorOverview from '../views/system/monitor/MonitorOverview.vue'
 import MonitorView from '../views/system/monitor/MonitorDetail.vue'
+// log 分析
+import LogAnalysisView from '../views/system/log/index.vue'
+import LogQueryView from '../views/system/log_query/index.vue'
 
 import LayoutView from '../views/layout/index.vue'
 
@@ -41,6 +44,18 @@ const router = createRouter({
           component: MonitorView, 
           meta: { title: '服務詳情控制' }
         },
+        {
+          path: '/system/log_query', 
+          name: 'LogQueryView',
+          component: LogQueryView, 
+          meta: { title: '日誌查詢' }
+        },
+        {
+          path: '/system/log', 
+          name: 'LogAnalysisView',
+          component: LogAnalysisView, 
+          meta: { title: '日誌智能分析' }
+        }
       ]
     },
 

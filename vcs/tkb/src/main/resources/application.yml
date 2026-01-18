@@ -27,7 +27,7 @@ logging:
 
 gitlab:
   url: "http://192.168.1.35/api/v4"
-  token: "glpat-G75sRdgD5fU7PvZaglUZmG86MQp1OnkH.01.0w1y0rl8x"
+  token: "glpat-RNWpFjH1gjuAx8Z4NI7iHm86MQp1OnkH.01.0w1jy1uvp" #2026/12/28 過期
   projects:
     - name: test
       id: 40857903

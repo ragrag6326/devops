@@ -23,7 +23,17 @@ export default defineConfig({
         target: 'http://192.168.1.35:8088',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/jenkins-proxy/, '')
-      }
+      },
+      '/n8n-proxy': {
+        target: 'http://192.168.1.35:90',
+        changeOrigin: true,
+        //rewrite: (path) => path.replace(/^\/n8n-proxy/, '')
+      },
+      // '/n8n-proxy': {
+      //   target: 'http://192.168.1.35:5678',
+      //   changeOrigin: true,
+      //   rewrite: (path) => path.replace(/^\/n8n-proxy/, '')
+      // },
     },
   }
 })

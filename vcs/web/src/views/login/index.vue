@@ -10,8 +10,8 @@ const router = useRouter();
 
 // 定義表單數據
 const loginForm = ref({
-    username: 'admin',
-    password: 'admin'
+    username: '',
+    password: ''
 });
 
 // 定義表單驗證規則
@@ -44,8 +44,10 @@ const handleLogin = async () => {
         if (result.code === 1) { // 建議明確比較 code 值
             ElMessage.success("登入成功");
 
-            localStorage.setItem('jwt_token', result.data);
             localStorage.setItem('current_username', loginForm.value.username); // 儲存用戶名
+            localStorage.setItem('jwt_token', result.data.token);
+            localStorage.setItem('current_id', result.data.id)      // 當前 ID
+            localStorage.setItem('current_role', result.data.role)  // 連 Role 一起存
 
             router.push('/homepage');
         } else {

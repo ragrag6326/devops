@@ -24,6 +24,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -96,7 +97,7 @@ public class GitlabMrServiceImpl extends ServiceImpl<GitlabMrMapper, GitlabMrEnt
         LambdaQueryChainWrapper<GitlabMrEntity> qw = this.lambdaQuery()
                 .eq(GitlabMrEntity::getProjectName, projectName)
                 .eq(GitlabMrEntity::getState, "merged")          // 只找已合併的
-                .eq(GitlabMrEntity::getTargetBranch, targetBranch)   // 動態傳入 develop 或 main
+                //.eq(GitlabMrEntity::getTargetBranch, targetBranch)   // 動態傳入 develop 或 main
                 //.between(GitlabMrEntity::getMergedAt, start, end)
                 .orderByAsc(GitlabMrEntity::getMergedAt); // 依照合併時間排序
 
@@ -206,5 +207,59 @@ public class GitlabMrServiceImpl extends ServiceImpl<GitlabMrMapper, GitlabMrEnt
                 .eq(GitlabMrEntity::getReleasedDev, GitlabReleaseState.TRUE.getCode())
                 .eq(GitlabMrEntity::getReleasedProd, GitlabReleaseState.FALSE.getCode())
                 .update();
+    }
+
+    @Override
+    public List<GitlabMrEntity> getMrsPending(String projectName) {
+        // Token
+        String token = gitlabConfig.getToken();
+
+        // 找 application 中對應專案的 project ID
+        Long projectId = gitlabConfig.getProjects()
+                .stream()
+                .filter(project -> project.getName().equals(projectName))
+                .findFirst()
+                .map(GitlabConfig.ProjectItem::getId)
+                .orElseThrow(() -> new RuntimeException("找不到對應專案: " + projectName));
+
+        // 2. 呼叫 API 取得列表
+        List<GitlabDto> dtoList  = gitlabApiClient.getMRInfo(projectId, token);
+
+        //
+        //
+        //
+        //
+        // System.out.println(dtoList);
+
+        // 3. 轉換與過濾
+        return dtoList.stream()
+                .filter(dto -> "opened".equals(dto.getState())) // GitLab API 的開啟狀態通常是 "opened"
+                .map(dto -> convertToEntity(dto, projectName))
+                .collect(Collectors.toList());
+
+    }
+
+
+    private GitlabMrEntity convertToEntity(GitlabDto dto, String projectName) {
+        GitlabMrEntity entity = new GitlabMrEntity();
+        entity.setProjectName(projectName);
+        entity.setMrId(dto.getId());
+        entity.setIid(dto.getIid());
+        entity.setTitle(dto.getTitle());
+        entity.setDescription(dto.getDescription());
+        entity.setState(dto.getState());
+        entity.setTargetBranch(dto.getTarget_branch());
+        entity.setSourceBranch(dto.getSource_branch());
+
+        // Null Safety 處理
+        if (dto.getAuthor() != null) entity.setAuthorName(dto.getAuthor().getName());
+        if (dto.getMerged_by() != null) entity.setMergedBy(dto.getMerged_by().getName());
+
+        // 時間轉換處理 (確保 dto 內的值不為 null)
+        if (dto.getMerged_at() != null) entity.setMergedAt(dto.getMerged_at().toLocalDateTime());
+        if (dto.getCreated_at() != null) entity.setCreatedAt(dto.getCreated_at().toLocalDateTime());
+        if (dto.getUpdated_at() != null) entity.setUpdatedAt(dto.getUpdated_at().toLocalDateTime());
+
+        return entity;
     }
 }

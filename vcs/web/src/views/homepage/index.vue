@@ -11,7 +11,7 @@ import request from '@/utils/request';
 // --- 1. 原本的儀表板數據 ---
 const stats = ref([
   { title: '總專案數', value: '18', icon: FolderOpened, color: '#3b82f6' },
-  { title: '待處理 MRs', value: '3', icon: Promotion, color: '#f59e0b' },
+  { title: '待處理 MRs', value: '0', icon: Promotion, color: '#f59e0b' },
   { title: '今日部署成功', value: '12', icon: Check, color: '#10b981' },
   { title: '版本衝突', value: '0', icon: CircleClose, color: '#ef4444' }
 ]);
@@ -23,6 +23,7 @@ const recentActivities = ref([
   { time: '2 天前', description: '專案 C 部署至 Staging 環境失敗，請檢查。', type: 'danger' }
 ]);
 
+
 // --- 2. 新增：Release Note 相關邏輯 ---
 const activeTab = ref('tkbgoapi_dev'); // 預設顯示的分頁
 const releaseNotes = ref({
@@ -33,13 +34,15 @@ const releaseNotes = ref({
 });
 const loading = ref(false);
 
+
 // 定義要請求的來源 API
 const sources = [
-  { key: 'tkbgoapi_dev', name: 'TKBGO API (Dev)', url: '/version/getReleaseNote', params: { projectName: 'tkbgoapi', env: 'dev' } },
-  { key: 'tkbgoapi_prod', name: 'TKBGO API (Prod)', url: '/version/getReleaseNote', params: { projectName: 'tkbgoapi', env: 'prod' } },
-  { key: 'tkbtv_dev', name: 'TKBTV (Dev)', url: '/version/getReleaseNote', params: { projectName: 'tkbtv', env: 'dev' } },
-  { key: 'tkbtv_prod', name: 'TKBTV (Prod)', url: '/version/getReleaseNote', params: { projectName: 'tkbtv', env: 'prod' } }
+  { key: 'tkbgoapi_dev', name: 'tkbgoapi', env: 'dev' , url: '/version/getReleaseNote', params: { projectName: 'tkbgoapi', env: 'dev' } },
+  { key: 'tkbgoapi_prod', name: 'tkbgoapi' , env: 'prod' , url: '/version/getReleaseNote', params: { projectName: 'tkbgoapi', env: 'prod' } },
+  { key: 'tkbtv_dev', name: 'tkbtv', env: 'dev' ,url: '/version/getReleaseNote', params: { projectName: 'tkbtv', env: 'dev' } },
+  { key: 'tkbtv_prod', name: 'tkbtv', env: 'prod' ,url: '/version/getReleaseNote', params: { projectName: 'tkbtv', env: 'prod' } }
 ];
+
 
 // 簡易 Markdown 轉 HTML 工具
 const formatMarkdown = (text) => {
@@ -51,6 +54,61 @@ const formatMarkdown = (text) => {
     .replace(/^\- (.*$)/gim, '<li class="rn-list-item">$1</li>')
     .replace(/\n/gim, '<br>');
 };
+
+const mrCountsMap = ref({}); // 紀錄各專案的 MR 數量
+const mrDataMap = ref({}); // 結構：{ tkbtv: { count: 1, list: [...] } }
+
+// --- 獲取待處理 MR 數量 ---
+const fetchPendingMRs = async () => {
+  const uniqueProjects = [...new Set(sources.map(s => s.name))];
+  
+  console.log(`uniqueProjects` , uniqueProjects);
+  
+  try {
+    const promises = uniqueProjects.map(projectName => 
+      request.get(`/gitlab/projects/${projectName}/mrs/pending`)
+        .then(res => {
+          // 根據您提供的結構：res.code === 1 且資料在 res.data
+          const list = res.data || []; 
+          return {
+            projectName,
+            count: (res.code === 1 && Array.isArray(res.data)) ? res.data.length : 0,
+            list: list
+          };
+        })
+        .catch(err => {
+          console.error(`Fetch MRs for ${projectName} failed:`, err);
+          return { projectName, count: 0};
+        })
+    );
+
+    const results = await Promise.all(promises);
+    
+    console.log(`mrDataMap= ` , results);
+    
+
+    let totalCount = 0;
+    const details = [];
+
+    results.forEach(item => {
+      mrDataMap.value[item.projectName] = { count: item.count, list: item.list }; // 供下方 Tab 使用
+      totalCount += item.count;
+      // 存入 details 供上方 Card 使用
+      details.push({ name: item.projectName, count: item.count });
+    });
+
+    // 更新統計卡片
+    const mrStat = stats.value.find(s => s.title === '待處理 MRs');
+    if (mrStat) {
+      mrStat.value = totalCount.toString();
+      mrStat.details = details; // 新增這行
+    }
+
+  } catch (error) {
+    console.error('Fetch all pending MRs error', error);
+  }
+};
+
 
 // 獲取所有 Release Notes
 const fetchReleaseNotes = async () => {
@@ -73,9 +131,16 @@ const fetchReleaseNotes = async () => {
   }
 };
 
+const refreshData = async () => {
+  loading.value = true;
+  await Promise.all([fetchReleaseNotes(), fetchPendingMRs()]);
+  loading.value = false;
+};
+
 onMounted(() => {
   console.log('Homepage Dashboard loaded.');
   fetchReleaseNotes(); // 載入時觸發
+  fetchPendingMRs(); // 初始載入
 });
 </script>
 
@@ -109,7 +174,31 @@ onMounted(() => {
             </el-icon>
             <div class="stat-info">
               <p class="stat-title">{{ stat.title }}</p>
-              <p class="stat-value" :style="{ color: stat.color }">{{ stat.value }}</p>
+              
+              <el-popover
+                v-if="stat.title === '待處理 MRs' && stat.details"
+                placement="bottom"
+                :width="200"
+                trigger="hover"
+                popper-class="mr-popper"
+              >
+                <template #reference>
+                  <p class="stat-value" :style="{ color: stat.color, cursor: 'pointer' }">
+                    {{ stat.value }}
+                  </p>
+                </template>
+                
+                <div class="mr-detail-list">
+                  <div v-for="item in stat.details" :key="item.name" class="mr-detail-item">
+                    <span class="detail-name">{{ item.name }}</span>
+                    <el-tag size="small" :type="item.count > 0 ? 'danger' : 'info'">
+                      {{ item.count }}
+                    </el-tag>
+                  </div>
+                </div>
+              </el-popover>
+
+              <p v-else class="stat-value" :style="{ color: stat.color }">{{ stat.value }}</p>
             </div>
           </div>
         </el-card>
@@ -125,7 +214,7 @@ onMounted(() => {
               <span class="header-title">
                 <el-icon class="header-icon"><Bell /></el-icon> 最新版本發布消息
               </span>
-              <el-button link type="primary" :loading="loading" @click="fetchReleaseNotes">
+              <el-button link type="primary" :loading="loading" @click="refreshData">
                 <el-icon><DataLine /></el-icon> 重新整理
               </el-button>
             </div>
@@ -135,12 +224,37 @@ onMounted(() => {
             <el-tab-pane 
               v-for="source in sources" 
               :key="source.key" 
-              :label="source.name" 
               :name="source.key"
             >
+              <template #label>
+                <span>{{ source.name }} ({{ source.env }})</span>
+                <el-badge 
+                  v-if="mrDataMap[source.name]?.count > 0" 
+                  :value="mrDataMap[source.name].count" 
+                  class="tab-badge"
+                />
+              </template>
+
               <div class="release-content-box custom-scrollbar">
                 <div v-html="formatMarkdown(releaseNotes[source.key])" class="markdown-body"></div>
+                <div v-if="mrDataMap[source.name] && mrDataMap[source.name].count > 0" class="mr-section">
+                    <h4 class="mr-section-title">
+                      <el-icon style="margin-right: 6px;"><Promotion /></el-icon>
+                      待處理 Merge Requests
+                    </h4>
+                    <div v-for="mr in mrDataMap[source.name].list" :key="mr.iid" class="mr-item">
+                      <div class="mr-item-header">
+                        <span class="mr-iid">!{{ mr.iid }}</span>
+                        <span class="mr-title">{{ mr.title }}</span>
+                      </div>
+                      <div class="mr-item-footer">
+                        <span>提交者：<strong>{{ mr.authorName }}</strong></span>
+                        <span><el-icon><Timer /></el-icon> {{ mr.createdAt }}</span>
+                      </div>
+                    </div>
+                  </div>
               </div>
+
             </el-tab-pane>
           </el-tabs>
         </el-card>
@@ -296,4 +410,91 @@ onMounted(() => {
 .custom-scrollbar::-webkit-scrollbar { width: 6px; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+
+
+/* --- MR 區塊樣式修正 --- */
+.mr-section {
+  margin-top: 20px;
+  padding: 15px;
+  background: rgba(255, 255, 255, 0.05); /* 輕微透明背景，區隔 Markdown 內容 */
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.mr-section-title {
+  margin: 0 0 15px 0;
+  font-size: 16px;
+  font-weight: bold;
+  /* 強制顏色：使用主色調或白色，避免被背景吃掉 */
+  color: #60a5fa !important; 
+  display: flex;
+  align-items: center;
+}
+
+.mr-item {
+  background: var(--panel); /* 確保背景與卡片一致 */
+  border: 1px solid var(--border-color);
+  padding: 12px;
+  margin-bottom: 10px;
+  border-radius: 6px;
+}
+
+/* 針對標題文字的顏色修正 */
+.mr-title {
+  color: #e5e7eb !important; /* 淺灰色/白色，確保在深色背景可見 */
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.mr-iid {
+  color: #fb7185; /* 亮粉色/紅色顯示 iid */
+  font-weight: bold;
+  margin-right: 8px;
+}
+
+.mr-item-footer {
+  margin-top: 8px;
+  display: flex;
+  justify-content: space-between;
+  /* 輔助文字使用較淡的顏色 */
+  color: #9ca3af !important; 
+  font-size: 12px;
+}
+
+.mr-author {
+  color: #fbbf24; /* 琥珀色強調提交者 */
+  font-weight: bold;
+}
+
+
+/* 統計細節彈窗樣式 */
+.mr-detail-list {
+  padding: 5px 0;
+}
+
+.mr-detail-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.mr-detail-item:last-child {
+  border-bottom: none;
+}
+
+.detail-name {
+  font-size: 13px;
+  color: var(--text); /* 跟隨主題文字顏色 */
+  font-weight: 500;
+}
+
+/* 讓 Popover 背景符合主題 */
+:deep(.el-popper.mr-popper) {
+  background: var(--panel) !important;
+  border: 1px solid var(--border-color) !important;
+  color: var(--text) !important;
+}
+
 </style>

@@ -1,7 +1,9 @@
 <script setup>
-import { onMounted, ref , watch } from 'vue'
-import { queryVersionPage , queryVersionById , deleteVersionById  , editRemark , getLatestSuccessVersion , getDevNextVersion , checkDeployable} from "@/api/version";
-import { triggerJenkinsBackendBuild } from "@/api/jenkins";
+import { onMounted, ref , watch , nextTick , onUnmounted } from 'vue'
+import { AnsiUp } from 'ansi_up';
+
+import { queryVersionPage , queryVersionById , deleteVersionById  , editRemark , getLatestSuccessVersion , getNextVersion , checkDeployable , updateJenkinsBuildId} from "@/api/version";
+import { triggerJenkinsBackendBuild , getJenkinsConsoleLog , getJenkinsPiplineNumber } from "@/api/jenkins";
 import { deploying } from "@/api/deploy";
 
 import { ElMessage , ElMessageBox , ElLoading, sliderContextKey } from 'element-plus'
@@ -17,7 +19,7 @@ const loading = ref(false)
 const projectNameOptions = [
     { label: "tkbgoapi", value: "tkbgoapi" },
     { label: "tkbtv", value: "tkbtv" },
-    { label: "tkbnuxt", value: "tkbnuxt" },
+    { label: "go_nuxt", value: "go_nuxt" },
 ]
 
 const projectEnvOptions = [
@@ -66,6 +68,50 @@ const handleCurrentChange = (val) => {
 const multipleSelection = ref([]);
 
 
+// --- jenkins 日誌視窗相關變數 ---
+const logDialogVisible = ref(false);
+const logContent = ref("");
+const logLoading = ref(false);
+const currentLogTitle = ref("");
+const currentLogInfo = ref({
+    env: '',
+    version: '',
+    buildId: '',
+    jobName: '',
+    url: '' ,
+    pipeline_url: ''
+});
+
+// --- 輪詢控制變數 ---
+let logTimer = null;         // 計時器 ID
+const isPolling = ref(false); // 是否正在輪詢中
+
+
+// 2. 實例化
+const ansiUp = new AnsiUp();
+
+// 監聽 dialog 關閉，確保停止輪詢
+watch(logDialogVisible, (val) => {
+    if (!val) {
+        stopPolling();
+    }
+});
+
+// 組件銷毀時也要確保停止
+onUnmounted(() => {
+    stopPolling();
+});
+
+// 停止輪詢的函數
+const stopPolling = () => {
+    if (logTimer) {
+        clearTimeout(logTimer);
+        logTimer = null;
+    }
+    isPolling.value = false;
+};
+
+
 // --------------------------------- 查詢歷史紀錄 ---------------------------------
 const search = async () => {
     try {
@@ -110,7 +156,8 @@ const versionForm = ref ({
     env: "",
     version: "",
     branch: "",
-    remark: ""
+    remark: "",
+    jenkinsBuildId: ""
 })
 
 // 監聽表單中 env 變化
@@ -127,10 +174,11 @@ watch(() => versionForm.value.env, async (newEnv) => {
         // ===============
         if (newEnv === 'dev') {
             // 呼叫 /next 接口，取得 Dev 的下一個版號 (e.g. 1.0.20 -> 1.0.21)
-            const res = await getDevNextVersion(projectName); // 假設這是您的 /api/version/next
+            const res = await getNextVersion(projectName , 'dev'); // 假設這是您的 /api/version/next
             if (res.code === 1) {
                 versionForm.value.version = res.data; // 自動填入 1.0.21
                 versionForm.value.branch = 'develop'; // 自動帶入分支
+                ElMessage.success(`已自動帶入 dev 部屬成功版本: ${res.data}`);
             }
         } 
         // ================
@@ -139,7 +187,7 @@ watch(() => versionForm.value.env, async (newEnv) => {
         else if (newEnv === 'prod') {
             // Prod 的版號來源，必須是 "Dev 最後成功的版本"
             // 這裡發送請求查 Dev 的 latest-success
-            const devLatestRes = await getLatestSuccessVersion(projectName, 'dev');
+            const devLatestRes = await getNextVersion(projectName, 'dev');
             const devVer = devLatestRes.data; //  1.0.20
 
             if (!devVer) {
@@ -149,7 +197,7 @@ watch(() => versionForm.value.env, async (newEnv) => {
             }
 
             // 防呆：檢查 Prod 是否已經跟上這個版本了
-            const prodLatestRes = await getLatestSuccessVersion(projectName, 'prod');
+            const prodLatestRes = await getNextVersion(projectName, 'prod');
             const prodVer = prodLatestRes.data; // 1.0.20 或 1.0.19
 
             // 如果 Dev (1.0.20) == Prod (1.0.20)
@@ -452,10 +500,17 @@ const submitVersionAddandEdit = async () => {
                         console.log(`Jenkins 建置開始！Build ID: ${buildNumber}`);
                         ElMessage.success(`部署成功啟動！Jenkins Build #${buildNumber}`);
                         
+                        
+                        const BuildIdParams = {
+                            id: recordId,
+                            jenkinsBuildId: buildNumber,
+                        };
+
+                        const updateResult = await updateJenkinsBuildId(BuildIdParams);
+                        console.log('JenkinsBuildId更新結果:', updateResult);
 
                         addDialogVisible.value = false;
                         search()
-
 
                     } catch (error) {
                         console.error('部署流程發生錯誤:', error);
@@ -486,6 +541,196 @@ const submitVersionAddandEdit = async () => {
     })
 }
 
+// --- 查看日誌的函數 ---
+const handleViewLog = async (row) => {
+
+
+    // 1. 設定 Dialog 標題
+    currentLogTitle.value = `專案: ${row.projectName} 環境: ${row.projectEnv} 版號: ${row.version}`;
+
+    const buildId = row.jenkinsBuildId || row.jenkins_build_id; 
+    let jobName = "";
+    let pipelineName = "";
+    let safePipelineUrl = 'Not yet generate pipeline_url , try again later when job finished';
+    let pipeline_link = ""
+
+
+    if ( row.projectName == 'go_nuxt') {
+        jobName="frontend-"
+    } else {
+        jobName="backend-"
+    }
+
+    if ( row.projectEnv == 'dev') {
+        jobName=`${jobName}dev`
+    } else {
+        pipelineName=`${jobName}pipeline`
+        jobName=`${jobName}prod`
+        pipeline_link = await getJenkinsPiplineNumber(pipelineName , jobName , buildId);
+    }
+
+    if (pipeline_link && pipeline_link.url) {
+        safePipelineUrl = pipeline_link.url + 'pipeline-overview/';
+    }
+    const console_url = `http://192.168.1.35:8088/job/${jobName}/${buildId}/console`
+
+
+    
+    // 1. 設定顯示資訊
+    currentLogInfo.value = {
+        env: row.projectEnv || 'Unknown Env', // 環境
+        version: row.version || 'Unknown Ver', // 版本
+        buildId: row.jenkinsBuildId || row.jenkins_build_id || '-', // Build ID
+        jobName: jobName || 'Unknown Job' ,// 專案/Job 名稱
+        url: console_url || 'Unknown console_url' ,
+        pipeline_url: safePipelineUrl
+    };
+
+    //console.log(jobName);
+    
+    if (!buildId) {
+        ElMessage.warning("尚未生成 Jenkins Build ID，請稍後再試或是確認部署狀態");
+        return;
+    }
+
+    if (!jobName) {
+        ElMessage.error("找不到專案名稱 (Job Name)，無法跳轉");
+        return;
+    }
+
+    openLogWindow(jobName, buildId);
+}
+
+// 取得 jenkins log
+const openLogWindow = async (env, buildNumber) => {
+    logDialogVisible.value = true;
+    logContent.value = "正在讀取日誌...";
+    stopPolling(); // 防止重複開啟
+
+    isPolling.value = true;
+
+    await pullLogRecursive(env, buildNumber, 0);
+}
+
+// --- 核心：遞迴讀取日誌 ---
+// startOffset: Jenkins API 支援從某個 byte 開始讀取 (增量讀取)，
+// 如果您的 API 封裝不支援 start 參數，傳 0 每次讀全部也可以 (但日誌大時會變慢)
+const pullLogRecursive = async (env, buildNumber, startOffset = 0) => {
+    // 1. 如果視窗關閉了，就停止執行
+    if (!logDialogVisible.value || !isPolling.value) return;
+
+    try {
+        // 呼叫 API (假設 getJenkinsConsoleLog 支援第三個參數 start)
+        // 如果您的 API 不支援 start，就只傳 env, buildNumber，但每次都會拿全部
+        const res = await getJenkinsConsoleLog(env, buildNumber);
+        
+        const rawLog = res.data; // 這次拿到的文字片段
+        
+        // --- 判斷是否還有新資料 ---
+        // Jenkins 通常會在 Header 回傳 X-More-Data: true 代表還在跑
+        // 或是我們簡單判斷：如果這次拿到的 rawLog 為空，且 build 狀態還沒結束，就繼續等
+        const hasMoreData = res.headers && res.headers['x-more-data'] === 'true';
+        
+        // 或是透過日誌內容暴力判斷是否結束 (Jenkins 標準結尾)
+        const isFinished = rawLog.includes('Finished: SUCCESS') || rawLog.includes('Finished: FAILURE') || rawLog.includes('Finished: ABORTED');
+
+        // --- 處理畫面顯示 ---
+        if (rawLog) {
+            // 轉換顏色
+            const htmlFragment = ansiUp.ansi_to_html(rawLog);
+
+            // 如果是增量讀取 (Offset > 0)，我們要用「追加」的方式
+            // 如果是全量讀取 (每次都拿全部)，則是「覆蓋」
+            if (startOffset > 0) {
+                 logContent.value += htmlFragment;
+            } else {
+                 // 如果您的 API 每次都回傳整包，這裡直接覆蓋
+                 // 注意：每次覆蓋畫面會閃爍，建議後端支援 start 參數
+                 logContent.value = htmlFragment;
+            }
+
+            // 捲動到底部
+            nextTick(() => {
+                const terminal = document.getElementById('terminal-content');
+                if (terminal) {
+                    terminal.scrollTop = terminal.scrollHeight;
+                }
+            });
+        }
+
+        // --- 決定下一動作 ---
+        if (isFinished) {
+            // A. 已結束：停止輪詢
+            stopPolling();
+            // 補上最後的提示 (可選)
+            logContent.value += '<br/><span style="color:#aaa">---日誌結束---</span>';
+        } else {
+            // B. 未結束：計算新的 offset 並繼續輪詢
+            
+            // Jenkins Header 會回傳 X-Text-Size 告訴你目前總大小，下次從這裡開始抓
+            let nextOffset = 0;
+            if (res.headers && res.headers['x-text-size']) {
+                nextOffset = parseInt(res.headers['x-text-size'], 10);
+            } else {
+                // 如果沒有 header，簡單做法是全量重抓 (offset 維持 0)
+                // 或者自己計算長度 (不精準，建議用 API Header)
+                nextOffset = 0; 
+            }
+
+            // 設置計時器，2秒後再抓一次
+            logTimer = setTimeout(() => {
+                pullLogRecursive(env, buildNumber, nextOffset);
+            }, 2000); 
+        }
+
+    } catch (error) {
+        console.error("Log Polling Error:", error);
+        
+        // 遇到錯誤 (例如 404 剛開始還沒生成 Log)，不要馬上死掉，可以 retry 幾次
+        // 這裡簡單做：如果還在開啟狀態，就休息 3 秒再試一次 (可能是網路波動)
+        if (logDialogVisible.value) {
+             logTimer = setTimeout(() => {
+                pullLogRecursive(env, buildNumber, 0); // 失敗重試通常從頭抓比較保險
+            }, 3000);
+        }
+    }
+}
+
+
+    // try {
+    //     // 直接從前端發送請求
+    //     const res = await getJenkinsConsoleLog(env, buildNumber);
+        
+    //     // 轉換 ANSI 編碼為 HTML
+    //     const rawLog = res.data;
+    //     // 將 ANSI 轉為 HTML，並將換行符 \n 轉為 HTML 換行 (如果不是用 <pre> 標籤的話需要)
+    //     const htmlLog = ansiUp.ansi_to_html(rawLog);
+
+    //     logContent.value = htmlLog;
+
+    //     // 使用 nextTick 確保 DOM 已經更新完 HTML 內容後再捲動
+    //     nextTick(() => {
+    //         const terminal = document.getElementById('terminal-content');
+    //         if (terminal) {
+    //             terminal.scrollTop = terminal.scrollHeight;
+    //         }
+    //     });
+
+    //     // 自動捲動到底部
+    //     // setTimeout(() => {
+    //     //     const terminal = document.getElementById('terminal-content');
+    //     //     if (terminal) terminal.scrollTop = terminal.scrollHeight;
+    //     // }, 100);
+
+    // } catch (error) {
+    //     console.error(error);
+    //     if (error.response && error.response.status === 404) {
+    //         logContent.value = '<span style="color: #ff5f56;">找不到該 Build ID 的日誌，可能已被刪除或尚未開始。</span>';
+    //     } else {
+    //         logContent.value = '<span style="color: #ff5f56;">讀取失敗，請確認 Jenkins 狀態。</span>';
+    //     }
+    // }
+//}
 
 
 // ------------------------------------------------------------------------------------------- 
@@ -552,14 +797,14 @@ onMounted (() => {
                 <el-table-column prop="version" label="版本" min-width="30"/>
                 <el-table-column prop="state" label="狀態" min-width="35">
                     <template #default="scope">
-                    <el-tag :type="scope.row.state === 1 ? 'success' : scope.row.state === 2 ? 'danger' : 'warning' ">
-                        {{ stateOptions.find(s => s.value === scope.row.state)?.label || "未知" }}
-                    </el-tag>
+                        <el-tag :type="scope.row.state === 1 ? 'success' : scope.row.state === 2 ? 'danger' : 'warning' ">
+                            {{ stateOptions.find(s => s.value === scope.row.state)?.label || "未知" }}
+                        </el-tag>
                     </template>
                 </el-table-column>
-                <el-table-column prop="remark" label="備註" min-width="60"/>
+                <el-table-column prop="remark" label="備註" min-width="50"/>
                 <el-table-column prop="createdTime" label="建立時間" min-width="60"/>
-                <el-table-column prop="updatedTime" label="更新時間" min-width="60" />
+                <!-- <el-table-column prop="updatedTime" label="更新時間" min-width="60" /> -->
 
                 <el-table-column label="操作" min-width="60" >
                     <template #default="scope">
@@ -567,6 +812,17 @@ onMounted (() => {
                         <el-button type="danger"  @click="handleDelete(scope.row)"><el-icon><Delete /></el-icon> &nbsp; 刪除</el-button>
                     </template>
                 </el-table-column>
+
+                <el-table-column label="查看jenkins操作日誌" min-width="35" align="center">
+                    <template #default="scope">
+                        <el-tooltip content="查看建置日誌" placement="top">
+                            <el-button circle type="info" plain :disabled="!scope.row.jenkinsBuildId" @click="handleViewLog(scope.row)">
+                                <el-icon ><Document /></el-icon>
+                            </el-button>
+                        </el-tooltip>
+                    </template>
+                </el-table-column>
+
         </el-table>
         <br>
     </div>
@@ -641,6 +897,54 @@ onMounted (() => {
     </el-dialog>
 
 
+    <el-dialog 
+        v-model="logDialogVisible" 
+        :title="'建置日誌: ' + currentLogTitle" 
+        width="900px" 
+        class="terminal-dialog"
+        destroy-on-close
+        top="5vh"
+    >
+        <div class="log-info-bar">
+            <el-descriptions :column="3" border size="small">
+                <el-descriptions-item label="專案環境">
+                    <el-tag type="success" size="small">{{ currentLogInfo.env }}</el-tag>
+                </el-descriptions-item>
+                <el-descriptions-item label="版本號">
+                    <el-tag type="primary" size="small">{{ currentLogInfo.version }}</el-tag>
+                </el-descriptions-item>
+                <el-descriptions-item label="Jenkins Build ID">
+                    <span style="font-family: monospace; font-weight: bold;">
+                        #{{ currentLogInfo.buildId }}
+                    </span>
+                </el-descriptions-item>
+
+                <el-descriptions-item label="console 連結" >
+                    <el-link :href="currentLogInfo.url" target="_blank" :underline="false">
+                        <el-tag type="primary" size="small">{{ currentLogInfo.url }}</el-tag>
+                    </el-link>
+                </el-descriptions-item>
+
+                <el-descriptions-item label="pipeline 連結" v-if="currentLogInfo.env == 'prod'" >
+                    <el-link :href="currentLogInfo.pipeline_url" target="_blank" :underline="false">
+                        <el-tag type="primary" size="small">{{ currentLogInfo.pipeline_url }}</el-tag>
+                    </el-link>
+                </el-descriptions-item>
+
+            </el-descriptions>
+        </div>
+
+        <div class="terminal-window" v-loading="logLoading" element-loading-background="rgba(0, 0, 0, 0.8)">
+            <div class="terminal-header">
+                <!-- <span class="dot red"></span>
+                <span class="dot yellow"></span>
+                <span class="dot green"></span> -->
+                <pre  id="terminal-content" class="terminal-body" v-html="logContent"></pre>
+            </div>
+            <!-- <pre id="terminal-content" class="terminal-body">{{ logContent }}</pre> -->
+        </div>
+    </el-dialog>
+
 </template>
 
 <style scoped>
@@ -648,7 +952,6 @@ onMounted (() => {
 .container{
     margin: 10px 0px;
 }
-
 
 /* =============================== */
 /*    表格組件樣式 (Table)          */
@@ -891,5 +1194,88 @@ onMounted (() => {
     background-color: #e5e7eb;
     color: #111827;
     border-color: #d1d5db;
+}
+</style>
+
+<style>
+/* 終端機 Dialog 樣式 (放在 scoped 外或 global) */
+.terminal-dialog .el-dialog__body {
+    padding: 0 !important;
+    background-color: #1e1e1e;
+}
+.terminal-dialog .el-dialog__header {
+    background-color: #2d2d2d;
+    margin-right: 0;
+    padding-bottom: 15px;
+}
+.terminal-dialog .el-dialog__title {
+    color: #ccc;
+    font-family: monospace;
+}
+</style>
+
+<style scoped>
+.log-info-bar {
+    margin-bottom: 15px;
+}
+
+/* 終端機視窗本體 */
+.terminal-window {
+    background-color: #1e1e1e; /* VSCode 深色背景 */
+    color: #d4d4d4;             /* 淺灰文字 */
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    border-radius: 0 0 4px 4px;
+    overflow: hidden;
+}
+
+.terminal-window {
+    background-color: #1e1e1e;
+    border-radius: 6px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    overflow: hidden;
+    font-family: 'Consolas', 'Monaco', monospace;
+}
+
+/* 模擬 Mac 視窗紅黃綠燈 */
+.terminal-header {
+    background-color: #252526;
+    padding: 8px 15px;
+    display: flex;
+    gap: 8px;
+    border-bottom: 1px solid #333;
+}
+.dot { width: 12px; height: 12px; border-radius: 50%; }
+.dot.red { background-color: #ff5f56; }
+.dot.yellow { background-color: #ffbd2e; }
+.dot.green { background-color: #27c93f; }
+
+/* Log 內容區 */
+.terminal-body {
+    background-color: #1e1e1e; /* 深色背景 */
+    color: #f0f0f0;            /* 預設文字顏色 (白色/淺灰) */
+    padding: 15px;
+    margin: 0;
+    white-space: pre-wrap;     /* 保留換行格式 */
+    word-break: break-all;
+    max-height: 500px;
+    overflow-y: auto;
+    font-family: 'Consolas', 'Monaco', monospace; /* 等寬字體 */
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+/* 自定義捲軸 */
+.terminal-body::-webkit-scrollbar {
+    width: 10px;
+}
+.terminal-body::-webkit-scrollbar-track {
+    background: #1e1e1e; 
+}
+.terminal-body::-webkit-scrollbar-thumb {
+    background: #444; 
+    border-radius: 5px;
+}
+.terminal-body::-webkit-scrollbar-thumb:hover {
+    background: #555; 
 }
 </style>
