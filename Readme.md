@@ -111,8 +111,7 @@ vcs/
 **首頁**					        
 <img src="assets/homepage.png" style="zoom:67%;" />
 
-**版本更新紀錄**					        
-<img src="assets/version.png" style="zoom:67%;" />
+
 
 **專案部屬**					        
 <img src="assets/deploy.png" style="zoom:67%;" />
