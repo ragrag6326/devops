@@ -56,10 +56,75 @@ filebeat.inputs:
 
   # 標記備援環境
   fields:
-    log_type: java_log
+    log_type: tv_log
     env: tv_green
     site: green
   fields_under_root: true
+
+# ================= VCS LOG ==================
+- type: log
+  enabled: true
+  id: vcs_logs
+  paths:
+    - /opt/vcs/app/logs/application-error.log
+  exclude_files: ['\.gz$']
+
+  # 多行設定同上
+  multiline.type: pattern
+  multiline.pattern: '^\d{4}-\d{2}-\d{2}'
+  multiline.negate: true
+  multiline.match: after
+
+  # 標記備援環境
+  fields:
+    log_type: vcs_spring_log
+    env: vcs
+    site: vcs
+  fields_under_root: true
+
+# ================= 正式機(blue) go_api_test ==================
+- type: log
+  enabled: true
+  id: tkbgo_api_test
+  paths:
+    #- /data/logs/go_api_test/logs/tkbgo_api*.log
+    - /data/logs/tkbgoapi/blue/logs/*.log
+  exclude_files: ['\.gz$']
+
+  # 多行合併
+  multiline.type: pattern
+  multiline.pattern: '^\d{4}-\d{2}-\d{2}'
+  multiline.negate: true
+  multiline.match:  after
+
+  fields:
+    log_type: go_spring_log
+    env: go_api_test
+    site: go_api_test
+  fields_under_root: true
+
+
+
+# ================= 備援機(green) go_api_backup ==================
+- type: log
+  enabled: true
+  id: tkbgo_api_backup
+  paths:
+    #- /data/logs/go_api_backup/logs/*.log
+    - /data/logs/tkbgoapi/green/logs/*.log
+  exclude_files: ['\.gz$']
+
+  multiline.type: pattern
+  multiline.pattern: '^\d{4}-\d{2}-\d{2}'
+  multiline.negate: true
+  multiline.match: after
+
+  fields:
+    log_type: go_spring_log
+    env: go_api_backup
+    site: go_api_backup
+  fields_under_root: true
+
 
 # ============================== Filebeat modules ==============================
 
@@ -183,6 +248,19 @@ processors:
   - add_docker_metadata: ~
   - add_kubernetes_metadata: ~
 
+  # 過濾正備援機不需要的日誌輸出
+  - drop_event:
+      when:
+        and:
+          # 條件 1: 內容包含關鍵字
+          - contains:
+              message: "BookshopServiceImpl"
+          # 條件 2: 只針對這兩個環境生效 (避免誤殺 TV 或 VCS 的 Log)
+          - or:
+              - equals:
+                  fields.env: "go_api_test"
+              - equals:
+                  fields.env: "tkbgo_api_backup"
 # ================================== Logging ===================================
 
 # Sets log level. The default log level is info.
