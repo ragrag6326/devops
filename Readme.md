@@ -112,13 +112,14 @@ vcs/
 <img src="assets/homepage.png" style="zoom:67%;" />
 
 **版本更新紀錄**					        
-<img src="assets/version.png" style="zoom:67%;" />
+<img src="assets/version2.png" style="zoom:67%;" />
 
 **專案部屬**					        
 <img src="assets/deploy.png" style="zoom:67%;" />
 
 **Jenkins CICD 部屬**					        
-<img src="assets/jenkins.png" style="zoom:67%;" />
+<img src="assets/jenkins2.png" style="zoom:67%;" />
+
 					
 **Gitlab 歷史紀錄**					        
 <img src="assets/gitlab_history.png" style="zoom:67%;" />
