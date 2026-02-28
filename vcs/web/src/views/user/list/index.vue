@@ -303,7 +303,11 @@ onMounted(() => {
       <el-table-column prop="role" label="角色" width="120" align="center">
         <template #default="scope">
           <el-tag :type="scope.row.role === 'ADMIN' ? 'success' : 'info'" size="small">
-            {{ scope.row.role === 'ADMIN' ? '管理員' : '一般使用者' }}
+            {{ 
+              scope.row.role === 'ADMIN' ? '管理員' : 
+              scope.row.role === 'FRONTEND_USER' ? '前端使用者' : 
+              scope.row.role === 'BACKEND_USER' ? '後端使用者' : '一般使用者' 
+            }}
           </el-tag>
         </template>
       </el-table-column>
@@ -398,7 +402,8 @@ onMounted(() => {
           <el-form-item label="角色" prop="role" v-if="isAdmin">
             <el-select v-model="userForm.role" placeholder="請選擇身分">
               <el-option label="ADMIN" value="ADMIN" />
-              <el-option label="USER" value="USER" />
+              <el-option label="FRONTEND_USER" value="FRONTEND_USER" />
+              <el-option label="BACKEND_USER" value="BACKEND_USER" />
             </el-select>
           </el-form-item>
         </el-col>

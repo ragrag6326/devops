@@ -17,8 +17,10 @@ const getJenkinsCrumb = () => {
   });
 };
 
-const triggerJenkinsBackendBuild = async (projectName, env, branch) => {
-  const JOB_NAME = `backend-${env}`;
+const triggerJenkinsBuild = async (projectName, env, branch , type) => {
+  // type = frontend / backend
+  // env = prod / dev
+  const JOB_NAME = `${type}-${env}`;
   const JOB_TOKEN = `${env}-yjjnoXvHXUE16TAmBzP4`; // 這是 Job 配置裡的 Token
 
   try {
@@ -138,7 +140,7 @@ const getJenkinsPiplineNumber = async (pipelineName , upstreamJobName , upstream
 
 
 export {
-    triggerJenkinsBackendBuild,
+    triggerJenkinsBuild,
     getJenkinsConsoleLog,
     getJenkinsPiplineNumber
 };

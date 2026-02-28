@@ -105,7 +105,7 @@ const handleClear = () => {
             </el-form>
 
             <div class="login-footer">
-                © 2025 版本控制管理系統 - 🤖 版權所有
+                © 2026 版本控制管理系統 - 🤖 版權所有
             </div>
         </div>
     </body>

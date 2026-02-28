@@ -41,7 +41,7 @@ const deleteVersionById = (ids) => {
  * 修改 remark 備註
  * @param data  需傳入 name env version
  */
-const editRemark = ( data ) => 
+const edit = ( data ) => 
     request.patch('/version/editRemark', data);
 
 
@@ -102,7 +102,7 @@ export {
     queryVersionPage,
     queryVersionById,
     deleteVersionById,
-    editRemark,
+    edit,
     getLatestSuccessVersion,
     getNextVersion,
     checkDeployable

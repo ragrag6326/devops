@@ -1,6 +1,8 @@
 package com.tkb.controller;
 
 import com.tkb.dto.DeployDTO;
+import com.tkb.dto.ImageInfoDTO;
+import com.tkb.dto.RenewImageDTO;
 import com.tkb.service.DeployService;
 import com.tkb.service.MonitorService;
 import com.tkb.utils.result.Result;
@@ -15,8 +17,9 @@ import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
 import java.time.LocalDate;
+import java.util.List;
 
-@Tag(name = "監控服務狀態", description = "健康檢查、當前流量查詢、流量切換、服務重啟")
+@Tag(name = "6.0.0 監控服務狀態", description = "健康檢查、當前流量查詢、流量切換、服務重啟")
 @Slf4j
 @RequiredArgsConstructor
 @RestController
@@ -25,7 +28,7 @@ public class MonitorController {
 
     private final MonitorService MonitorService;
 
-    @Operation(summary = "服務健康檢查", description = "檢測指定專案與節點的 HTTP 狀態 (返回 200 代表正常)")
+    @Operation(summary = "6.0.1 服務健康檢查", description = "檢測指定專案與節點的 HTTP 狀態 (返回 200 代表正常)")
     @GetMapping("/health/{projectName}/{nodeType}")
     public Result healthCheck(
             @Parameter(description = "專案名稱", required = true, example = "tkbtv")
@@ -38,7 +41,7 @@ public class MonitorController {
         return Result.success(healthCode);
     }
 
-    @Operation(summary = "查詢當前流量狀態", description = "查詢 Nginx 目前將流量導向哪個環境 (Blue 或 Green)")
+    @Operation(summary = "6.0.2 查詢當前流量狀態", description = "查詢 Nginx 目前將流量導向哪個環境 (Blue 或 Green)")
     @GetMapping("/traffic/{projectName}/{trafficType}")
     public Result<String> getCurrentTraffic(
             @Parameter(description = "專案名稱", required = true, example = "tkbtv")
@@ -47,7 +50,7 @@ public class MonitorController {
             @Parameter(description = "流量類型 (live (正式) | header (header測試) )", required = true, example = "live")
             @PathVariable String trafficType
     ) {
-        String traffic = MonitorService.getTraffic( projectName , trafficType);
+        String traffic = MonitorService.getTraffic(projectName, trafficType);
         return Result.success(traffic);
     }
 
@@ -57,7 +60,7 @@ public class MonitorController {
      * @param target 重啟目標 blue | green
      * @return
      */
-    @Operation(summary = "重啟服務節點", description = "觸發 Shell 腳本重啟指定的 Docker 容器 (Blue 或 Green)")
+    @Operation(summary = "6.0.3 重啟服務節點", description = "觸發 Shell 腳本重啟指定的 Docker 容器 (Blue 或 Green)")
     @PostMapping("/restart")
     public Result<String> restartService(
             @Parameter(description = "操作人員", required = true, example = "admin")
@@ -74,7 +77,7 @@ public class MonitorController {
         return Result.success(result);
     }
 
-    @Operation(summary = "切換流量指向 (藍綠切換)", description = "修改 Nginx 配置，將流量切換至指定顏色環境")
+    @Operation(summary = "6.0.4 切換流量指向 (藍綠切換)", description = "修改 Nginx 配置，將流量切換至指定顏色環境")
     @PatchMapping("/switchTraffic")
     public Result<String> switchTraffic(
             @Parameter(description = "操作人員", required = true, example = "admin")
@@ -93,8 +96,30 @@ public class MonitorController {
         return Result.success(traffic);
     }
 
+    @Operation(summary = "6.0.5 取得機器上的版本號", description = "取得機器上的版本號")
+    @GetMapping("/getImageVersion")
+    public Result<List> getImageVersion(
+            @Parameter(description = "專案名稱", required = true, example = "go_nuxt")
+            @RequestParam String projectName
+    ) {
+        List<ImageInfoDTO> dockerImageVersions = MonitorService.getDockerImageVersions(projectName);
+        return Result.success(dockerImageVersions);
+    }
 
-    @Operation(summary = "稽核日誌分頁查詢", description = "根據條件篩選並分頁顯示操作日誌")
+    @Operation(summary = "6.0.6 版本號更新", description = "退版")
+    @PostMapping("/renewImage")
+    public Result<String> renewimage (@RequestBody RenewImageDTO dto ) {
+
+        String opertaionName = dto.getOpertaionName();
+        String projectName = dto.getProjectName();
+        String nodeType = dto.getNodeType();
+        String version = dto.getVersion();
+
+        String result = MonitorService.renewImage(opertaionName, projectName, nodeType, version);
+        return Result.success(result);
+    }
+
+    @Operation(summary = "6.0.7 稽核日誌分頁查詢", description = "根據條件篩選並分頁顯示操作日誌")
     @GetMapping("/list")
     public Result getAudLogPage(
             @Parameter(description = "頁碼 (預設 1)", example = "1")

@@ -8,7 +8,7 @@ import { ElMessage } from 'element-plus'
 const router = useRouter()
 
 // --- 專案與卡片狀態 ---
-const projectNames = ['tv', 'go-api', 'go-nuxt', 'player' ,'test']
+const projectNames = ['tv', 'go-api', 'go_nuxt', 'player' ,'test']
 const projects = ref([])
 const dashboardLoading = ref(false) // 專給卡片區塊用的 loading
 

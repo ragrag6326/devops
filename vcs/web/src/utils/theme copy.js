@@ -1,17 +1,13 @@
 // src/utils/theme.js
-import { useDark, useToggle } from '@vueuse/core' // 這是 VueUse 的寫法，如果您沒用 VueUse，請用下方的原生寫法
 
-// === 原生 JS 寫法 (與您原本的類似，但增強了對比度切換的邏輯) ===
-
+// 1. 切換主題的函數
 export const toggleTheme = (isDark) => {
   const html = document.documentElement;
   
   if (isDark) {
-    // 1. 設定 HTML 屬性供 CSS 變數使用
     html.setAttribute('data-theme', 'dark');
-    // 2. Element Plus 需要 class="dark"
-    html.classList.add('dark');
-    // 3. 儲存設定
+    // 如果有用 Element Plus 的暗黑模式，也要加上 class="dark"
+    html.classList.add('dark'); 
     localStorage.setItem('theme', 'dark');
   } else {
     html.setAttribute('data-theme', 'light');
@@ -20,10 +16,12 @@ export const toggleTheme = (isDark) => {
   }
 };
 
+// 2. 初始化函數 (放在 main.js 或 App.vue onMounted 呼叫)
 export const initTheme = () => {
   const savedTheme = localStorage.getItem('theme');
-  // 檢查系統偏好
+  // 如果沒有儲存過，可以檢查系統偏好
   const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  console.log("systemPrefersDark" + systemPrefersDark);
   
   if (savedTheme === 'dark' || (!savedTheme && systemPrefersDark)) {
     toggleTheme(true);

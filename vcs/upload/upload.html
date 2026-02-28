@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>極限對比檔案部署系統</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;700;900&display=swap');
+
+        :root {
+            --neon-yellow: #f3ff00;
+            --neon-cyan: #00ffff;
+            --danger-pink: #ff00ff;
+            --bg-black: #000000;
+        }
+
+        body {
+            background-color: var(--bg-black);
+            color: white;
+            font-family: 'Inter', sans-serif;
+            overflow-x: hidden;
+        }
+
+        .mono { font-family: 'JetBrains Mono', monospace; }
+
+        /* 高對比按鈕 */
+        .btn-action {
+            background-color: var(--neon-yellow);
+            color: black;
+            font-weight: 900;
+            transition: all 0.15s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .btn-action:hover {
+            background-color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 0 20px rgba(243, 255, 0, 0.4);
+        }
+
+        .btn-action:disabled {
+            background-color: #333;
+            color: #666;
+            transform: none;
+            box-shadow: none;
+        }
+
+        /* 虛線拖放區 */
+        .drop-zone {
+            border: 4px dashed var(--neon-cyan);
+            background: rgba(0, 255, 255, 0.03);
+            transition: all 0.3s ease;
+        }
+
+        .drop-zone.dragover {
+            border-color: var(--neon-yellow);
+            background: rgba(243, 255, 0, 0.1);
+        }
+
+        /* 捲軸美化 */
+        ::-webkit-scrollbar { width: 10px; }
+        ::-webkit-scrollbar-track { background: #111; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 5px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--neon-cyan); }
+
+        /* 霓虹發光效果 */
+        .neon-text-cyan { text-shadow: 0 0 10px rgba(0, 255, 255, 0.5); }
+        
+        /* 預覽視窗動畫 */
+        .preview-modal {
+            background: rgba(0, 0, 0, 0.95);
+            backdrop-filter: blur(10px);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center py-10 px-4">
+
+    <!-- 主容器 -->
+    <div class="w-full max-w-4xl">
+        
+        <!-- Header -->
+        <header class="mb-10 text-center md:text-left flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div>
+                <h1 class="text-5xl font-black italic tracking-tighter text-white uppercase">
+                    圖片 <span class="text-[var(--neon-yellow)]">上傳</span>
+                </h1>
+                <p class="text-[var(--neon-cyan)] font-bold mono mt-2 neon-text-cyan">
+                    > 圖片檔案上傳
+                </p>
+            </div>
+            <div class="text-xs text-zinc-500 mono bg-zinc-900 p-2 rounded">
+                STATUS: READY_TO_UPLOAD
+            </div>
+        </header>
+
+        <main class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            <!-- 左側設定與操作 (7 cols) -->
+            <div class="lg:col-span-7 space-y-6">
+                
+                <!-- 1. 目標路徑 -->
+                <section class="bg-zinc-900 p-6 rounded-2xl border border-zinc-800">
+                    <label class="block text-sm font-black text-zinc-400 uppercase mb-3 tracking-widest">
+                        伺服器目標路徑 (Shell Destination)
+                    </label>
+                    <div class="relative">
+                        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--neon-cyan)] mono font-bold">$</span>
+                        <input type="text" id="targetPath" 
+                               class="w-full bg-black border-2 border-zinc-700 rounded-xl py-4 pl-10 pr-4 text-white mono focus:outline-none focus:border-[var(--neon-cyan)] transition-colors"
+                               placeholder="/var/www/html/assets/uploads/"
+                               value="/tmp/deploy/">
+                    </div>
+                </section>
+
+                <!-- 2. 拖放區 -->
+                <section id="dropZone" class="drop-zone rounded-3xl p-12 text-center cursor-pointer group">
+                    <input type="file" id="fileInput" class="hidden" multiple>
+                    <div class="flex flex-col items-center">
+                        <div class="w-20 h-20 bg-[var(--neon-cyan)] text-black rounded-full flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                            <i data-lucide="upload" class="w-10 h-10"></i>
+                        </div>
+                        <h2 class="text-2xl font-black mb-2">拖曳檔案至此</h2>
+                        <p class="text-zinc-500 mono uppercase text-sm">或點擊開啟檔案選取器</p>
+                    </div>
+                </section>
+
+                <!-- 3. 上傳按鈕 -->
+                <button id="uploadBtn" disabled class="btn-action w-full py-6 rounded-2xl text-2xl flex items-center justify-center gap-3">
+                    <i data-lucide="zap" class="w-8 h-8"></i>
+                    開始部署檔案
+                </button>
+
+            </div>
+
+            <!-- 右側檔案清單與結果 (5 cols) -->
+            <div class="lg:col-span-5 space-y-6">
+                
+                <!-- 檔案清單 -->
+                <div class="bg-zinc-900 rounded-2xl border border-zinc-800 flex flex-col h-[500px]">
+                    <div class="p-4 border-b border-zinc-800 flex justify-between items-center">
+                        <span class="font-black uppercase text-xs tracking-widest text-zinc-400">待部署清單</span>
+                        <span id="fileCount" class="bg-[var(--neon-cyan)] text-black text-[10px] px-2 py-1 rounded font-bold">0 FILES</span>
+                    </div>
+                    
+                    <div id="fileList" class="flex-1 overflow-y-auto p-4 space-y-2">
+                        <div id="emptyState" class="h-full flex flex-col items-center justify-center text-zinc-600 italic text-sm">
+                            尚未選取檔案
+                        </div>
+                    </div>
+
+                    <!-- 上傳進度 -->
+                    <div id="progressContainer" class="hidden p-4 bg-black border-t border-zinc-800">
+                        <div class="flex justify-between mb-2 mono text-[10px] text-[var(--neon-yellow)]">
+                            <span>UPLOADING...</span>
+                            <span id="progressPercent">0%</span>
+                        </div>
+                        <div class="w-full bg-zinc-800 h-2 rounded-full overflow-hidden">
+                            <div id="progressBar" class="bg-[var(--neon-yellow)] h-full w-0 transition-all"></div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+
+        <!-- 成功結果顯示區 -->
+        <div id="resultSection" class="hidden mt-12 space-y-4">
+            <h3 class="text-[var(--neon-cyan)] font-black uppercase tracking-widest flex items-center gap-2">
+                <i data-lucide="check-circle" class="w-5 h-5"></i> 部署成功網址清單
+            </h3>
+            <div id="urlList" class="grid grid-cols-1 gap-3">
+                <!-- 動態生成的網址列 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 預覽 Modal -->
+    <div id="previewModal" class="fixed inset-0 preview-modal z-50 hidden flex flex-col items-center justify-center p-4 md:p-10">
+        <div class="absolute top-6 right-6 flex gap-4">
+            <button id="closePreview" class="bg-white text-black p-3 rounded-full hover:bg-[var(--danger-pink)] transition-colors">
+                <i data-lucide="x" class="w-8 h-8"></i>
+            </button>
+        </div>
+        <div id="previewContent" class="w-full max-w-5xl h-full flex items-center justify-center overflow-hidden border-4 border-zinc-800 rounded-2xl bg-black">
+            <!-- 預覽內容 -->
+        </div>
+        <div id="previewMeta" class="mt-4 text-[var(--neon-cyan)] font-bold mono"></div>
+    </div>
+
+    <script>
+        // 初始化 Lucide 圖示
+        lucide.createIcons();
+
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const fileList = document.getElementById('fileList');
+        const fileCount = document.getElementById('fileCount');
+        const emptyState = document.getElementById('emptyState');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const targetPath = document.getElementById('targetPath');
+        const progressBar = document.getElementById('progressBar');
+        const progressPercent = document.getElementById('progressPercent');
+        const progressContainer = document.getElementById('progressContainer');
+        const resultSection = document.getElementById('resultSection');
+        const urlList = document.getElementById('urlList');
+        
+        const previewModal = document.getElementById('previewModal');
+        const previewContent = document.getElementById('previewContent');
+        const previewMeta = document.getElementById('previewMeta');
+        const closePreview = document.getElementById('closePreview');
+
+        let selectedFiles = [];
+
+        // 點擊觸發
+        dropZone.addEventListener('click', () => fileInput.click());
+
+        // 檔案選擇
+        fileInput.addEventListener('change', (e) => {
+            addFiles(e.target.files);
+        });
+
+        // 拖放邏輯
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            addFiles(e.dataTransfer.files);
+        });
+
+        function addFiles(files) {
+            const newFiles = Array.from(files);
+            selectedFiles = [...selectedFiles, ...newFiles];
+            updateUI();
+        }
+
+        function removeFile(index) {
+            selectedFiles.splice(index, 1);
+            updateUI();
+        }
+
+        function updateUI() {
+            if (selectedFiles.length > 0) {
+                emptyState.classList.add('hidden');
+                uploadBtn.disabled = false;
+                fileCount.textContent = `${selectedFiles.length} FILES`;
+                
+                fileList.innerHTML = selectedFiles.map((file, index) => `
+                    <div class="flex items-center justify-between bg-black p-3 rounded-xl border border-zinc-800 hover:border-zinc-600 transition-colors">
+                        <div class="flex items-center gap-3 overflow-hidden">
+                            <i data-lucide="file" class="w-5 h-5 text-[var(--neon-cyan)] shrink-0"></i>
+                            <div class="flex flex-col overflow-hidden">
+                                <span class="text-xs font-bold text-zinc-100 truncate">${file.name}</span>
+                                <span class="text-[10px] mono text-zinc-500 uppercase">${(file.size / 1024).toFixed(1)} KB</span>
+                            </div>
+                        </div>
+                        <button onclick="event.stopPropagation(); removeFile(${index})" class="text-zinc-600 hover:text-[var(--danger-pink)] p-1">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                `).join('');
+                lucide.createIcons();
+            } else {
+                emptyState.classList.remove('hidden');
+                uploadBtn.disabled = true;
+                fileCount.textContent = `0 FILES`;
+                fileList.innerHTML = '';
+                fileList.appendChild(emptyState);
+            }
+        }
+
+        // 上傳與執行 Shell 的模擬
+        uploadBtn.addEventListener('click', async () => {
+            const dest = targetPath.value.trim();
+            if (!dest) {
+                alert("請指定目標路徑");
+                return;
+            }
+
+            uploadBtn.disabled = true;
+            progressContainer.classList.remove('hidden');
+            resultSection.classList.add('hidden');
+            
+            const formData = new FormData();
+            selectedFiles.forEach(file => formData.append('files', file));
+            formData.append('destination', dest);
+
+            try {
+                // 這裡模擬 API 上傳過程
+                for (let i = 0; i <= 100; i += 10) {
+                    progressBar.style.width = i + '%';
+                    progressPercent.textContent = i + '%';
+                    await new Promise(r => setTimeout(r, 150));
+                }
+
+                // 假設後端 API 回傳成功的資料格式：
+                // { success: true, urls: ["http://domain.com/path/file.jpg", ...] }
+                const mockResponse = {
+                    success: true,
+                    urls: selectedFiles.map(f => `https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&q=80&w=1000&id=${Math.random()}`)
+                };
+
+                displayResults(mockResponse.urls, selectedFiles);
+                
+                // 清空已選檔案
+                selectedFiles = [];
+                updateUI();
+                
+            } catch (error) {
+                console.error("上傳失敗", error);
+            } finally {
+                uploadBtn.disabled = false;
+                setTimeout(() => {
+                    progressContainer.classList.add('hidden');
+                    progressBar.style.width = '0%';
+                }, 1000);
+            }
+        });
+
+        function displayResults(urls, files) {
+            resultSection.classList.remove('hidden');
+            urlList.innerHTML = urls.map((url, i) => `
+                <div class="flex flex-col md:flex-row items-center gap-4 bg-zinc-900 p-4 rounded-2xl border-2 border-[var(--neon-cyan)]">
+                    <div class="flex-1 mono text-xs text-white break-all bg-black p-3 rounded border border-zinc-800">
+                        ${url}
+                    </div>
+                    <div class="flex gap-2 w-full md:w-auto">
+                        <button onclick="openInPreview('${url}', '${files[i].name}')" class="flex-1 md:flex-none bg-[var(--neon-cyan)] text-black px-4 py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-2 hover:bg-white transition-colors">
+                            <i data-lucide="eye" class="w-4 h-4"></i> 即時預覽
+                        </button>
+                        <a href="${url}" target="_blank" class="flex-1 md:flex-none bg-zinc-800 text-white px-4 py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-2 hover:bg-zinc-700 transition-colors">
+                            <i data-lucide="external-link" class="w-4 h-4"></i> 新分頁開啟
+                        </a>
+                    </div>
+                </div>
+            `).join('');
+            lucide.createIcons();
+            
+            // 自動捲動到結果區
+            resultSection.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // 預覽功能
+        window.openInPreview = (url, filename) => {
+            previewModal.classList.remove('hidden');
+            previewMeta.textContent = `FILE: ${filename.toUpperCase()}`;
+            
+            const ext = filename.split('.').pop().toLowerCase();
+            
+            if (['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(ext)) {
+                previewContent.innerHTML = `<img src="${url}" class="max-w-full max-h-full object-contain" alt="preview">`;
+            } else if (ext === 'pdf') {
+                previewContent.innerHTML = `<iframe src="${url}" class="w-full h-full border-none"></iframe>`;
+            } else {
+                previewContent.innerHTML = `
+                    <div class="text-center p-10">
+                        <i data-lucide="file-warning" class="w-16 h-16 text-zinc-600 mb-4 mx-auto"></i>
+                        <p class="text-zinc-400 mono">此檔案類型不支援瀏覽器內嵌預覽</p>
+                        <a href="${url}" target="_blank" class="text-[var(--neon-yellow)] underline mt-4 inline-block font-bold uppercase">點此下載查看</a>
+                    </div>
+                `;
+                lucide.createIcons();
+            }
+        };
+
+        closePreview.addEventListener('click', () => {
+            previewModal.classList.add('hidden');
+            previewContent.innerHTML = '';
+        });
+
+        // 點擊 Modal 外部關閉
+        previewModal.addEventListener('click', (e) => {
+            if (e.target === previewModal) closePreview.click();
+        });
+    </script>
+</body>
+</html>

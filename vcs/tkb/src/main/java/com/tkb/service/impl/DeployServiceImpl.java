@@ -37,6 +37,7 @@ public class DeployServiceImpl implements DeployService  {
         String projectName = dto.getProjectName();
         String projectEnv = dto.getProjectEnv();
 
+
         // 檢查是否已有一筆該版號且狀態為 0 的資料 (前端寫入的那筆)
         VersionEntity one = VersionService.lambdaQuery()
                 .eq(VersionEntity::getProjectName, projectName)
@@ -63,12 +64,13 @@ public class DeployServiceImpl implements DeployService  {
         versionEntity.setProjectName(dto.getProjectName());
         versionEntity.setVersion(dto.getVersion());
         versionEntity.setProjectEnv(dto.getProjectEnv());
+        versionEntity.setNodeType(dto.getNodeType());
         versionEntity.setState(DeployState.DEPLOYING.getCode()); // 0 = DEPLOYING
         versionEntity.setCreatedBy(dto.getUser());
         versionEntity.setCreatedTime(LocalDateTime.now());
         VersionService.save(versionEntity);
 
-        log.info("➡ 部署開始紀錄：{}-{} v{}", projectName, projectEnv, version);
+        log.info("➡ 部署開始紀錄：{}-{} {} {}", projectName, projectEnv, dto.getNodeType() ,version);
 
         // MyBatis Plus save 後會自動將 ID 回填到 entity 中
         return versionEntity.getId();

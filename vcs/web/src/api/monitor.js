@@ -18,7 +18,9 @@ export function getCurrentTraffic(projectName, trafficType) {
   * @returns
  */
 export function healthCheck(projectName, nodeType) {
-  return request.get(`/monitor/health/${projectName}/${nodeType}`);
+  return request.get(`/monitor/health/${projectName}/${nodeType}` , {
+    timeout: 20000 // 設定 10 秒後超時 
+  });
 }
 
 /** 
@@ -63,4 +65,30 @@ export function restartService(opertaionName, projectName, target) {
  */
 export function getAudLogPage(page, pageSize, projectName, status, StartDate, EndDate) {
   return request.get(`/monitor/list?page=${page}&pageSize=${pageSize}&projectName=${projectName}&status=${status}&StartDate=${StartDate}&EndDate=${EndDate}`);
+}
+
+/** 
+ * 6.0.5 取得機器上的版本號
+ * @param {string} projectName 專案名稱
+  * @returns
+ */
+export function getImageVersion(projectName) {
+  return request.get(`/monitor/getImageVersion?projectName=${projectName}`);
+}
+
+/** 
+ * 6.0.6 版本號更新
+ * @param {object} params 更新image請求參數物件
+ * @param {string} params.opertaionName 操作人員
+ * @param {string} params.projectName 專案名稱
+ * @param {string} params.nodeType 類型
+ * @param {string} params.version 部屬版號
+ * @returns
+ */
+export function renewimage(params) {
+  return request.post(`/monitor/renewImage`, params,
+    {
+      timeout: 10000 //  設定 10 秒超時
+    }
+  );
 }

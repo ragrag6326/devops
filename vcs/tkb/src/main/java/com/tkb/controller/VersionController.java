@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDate;
 import java.util.List;
 
-@Tag(name = "版本控制管理", description = "提供版本的查詢、生成、檢核與狀態維護")
+@Tag(name = "2.0.0 版本控制管理", description = "提供版本的查詢、生成、檢核與狀態維護")
 @Slf4j
 @RequiredArgsConstructor
 @RestController
@@ -33,7 +33,7 @@ public class VersionController {
      * @param state
      * @return
      */
-    @Operation(summary = "分頁查詢版本列表", description = "根據條件篩選並分頁顯示版本紀錄")
+    @Operation(summary = "2.0.1 分頁查詢版本列表", description = "根據條件篩選並分頁顯示版本紀錄")
     @GetMapping("/list")
     public Result listPage(
             @Parameter(description = "頁碼 (預設 1)", example = "1")
@@ -62,7 +62,7 @@ public class VersionController {
      * @param env
      * @return
      */
-    @Operation(summary = "取得下一個版本號", description = "根據目前版號規則自動生成下一個版號 (例如 v1.0.0 -> v1.0.1)")
+    @Operation(summary = "2.0.2 取得下一個版本號", description = "根據目前版號規則自動生成下一個版號 (例如 v1.0.0 -> v1.0.1)")
     @GetMapping("/next")
     public Result<String> nextVersion(
             @Parameter(description = "專案名稱", required = true, example = "tkbtv") String projectName,
@@ -78,7 +78,7 @@ public class VersionController {
      * @param projectName
      * @return void
      */
-    @Operation(summary = "取得最後一次成功的版本", description = "通常用於 Prod 環境查詢 Dev 環境最後一個穩定的版本")
+    @Operation(summary = "2.0.3 取得最後一次成功的版本", description = "通常用於 Prod 環境查詢 Dev 環境最後一個穩定的版本")
     @GetMapping("/latest-success")
     public Result<String> latestSuccess(
             @Parameter(description = "專案名稱", required = true) String projectName ,
@@ -91,7 +91,7 @@ public class VersionController {
         return Result.success(version);
     }
 
-    @Operation(summary = "檢查是否可部屬", description = "檢核目標版本是否符合部屬規則")
+    @Operation(summary = "2.0.4 檢查是否可部屬", description = "檢核目標版本是否符合部屬規則")
     @GetMapping("/check-deployable")
     public Result<String> checkDeployable(
             @Parameter(description = "專案名稱", required = true) @RequestParam String projectName,
@@ -110,7 +110,7 @@ public class VersionController {
      * @param env
      * @return
      */
-    @Operation(summary = "取得 Release Note", description = "查詢該版本在 GitLab MR 中的 Release Note")
+    @Operation(summary = "2.0.5 取得 Release Note", description = "查詢該版本在 GitLab MR 中的 Release Note")
     @GetMapping("/getReleaseNote")
         public Result<String> getReleaseNote(
             @Parameter(description = "專案名稱") String projectName,
@@ -125,7 +125,7 @@ public class VersionController {
      * @param versionEntity
      * @return
      */
-    @Operation(summary = "修改版本備註", description = "針對既有版本更新備註欄位")
+    @Operation(summary = "2.0.6 修改版本備註", description = "針對既有版本更新備註欄位")
     @PatchMapping("/editRemark")
     public Result<String> editRemark(@RequestBody VersionEntity versionEntity) {
 
@@ -141,7 +141,7 @@ public class VersionController {
      * queryVersionById
      * @param id 版本主鍵 ID
      */
-    @Operation(summary = "根據 ID 查詢詳情")
+    @Operation(summary = "2.0.7 根據 ID 查詢詳情")
     @GetMapping("/{id}")
     public Result<VersionEntity> queryById(
             @Parameter(description = "版本主鍵 ID", required = true) @PathVariable Long id
@@ -153,7 +153,7 @@ public class VersionController {
      * batchDeleteVersionById
      * @param ids 版本主鍵 ID
      */
-    @Operation(summary = "批量刪除版本", description = "根據 ID 列表刪除多筆版本紀錄")
+    @Operation(summary = "2.0.8 批量刪除版本", description = "根據 ID 列表刪除多筆版本紀錄")
     @DeleteMapping("/{ids}")
     public Result<String> batchDeleteById(
             @Parameter(description = "ID 列表 (以逗號分隔)", required = true, example = "1,2,3")
@@ -170,7 +170,7 @@ public class VersionController {
      * updateBuildId
      * @param versionEntity
      */
-    @Operation(summary = "新增JenkinsBuildId ", description = "儲存 JenkinsBuildId")
+    @Operation(summary = "2.0.9 新增JenkinsBuildId ", description = "儲存 JenkinsBuildId")
     @PostMapping("/updateBuildId")
     public Result<String> updateJenkinsBuildId(
             @RequestBody VersionEntity versionEntity

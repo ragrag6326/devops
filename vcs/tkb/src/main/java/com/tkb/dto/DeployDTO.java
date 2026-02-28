@@ -24,6 +24,9 @@ public class DeployDTO {
     @Schema(description = "執行部屬的人員/帳號", example = "jenkins")
     private String user;
 
+    @Schema(description = "節點類型" , example = "prod/backup")
+    private String nodeType;
+
     @Schema(description = "發布備註/更動內容", example = "修復登入逾時問題")
     private String releaseNote;
 }

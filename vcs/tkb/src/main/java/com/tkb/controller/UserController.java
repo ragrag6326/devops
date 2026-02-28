@@ -17,7 +17,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 
-@Tag(name = "用戶查詢", description = "提供用戶的查詢、新增、刪除、修改密碼")
+@Tag(name = "5.0.0 用戶查詢", description = "提供用戶的查詢、新增、刪除、修改密碼")
 @Slf4j
 @RequiredArgsConstructor
 @RestController
@@ -26,7 +26,7 @@ public class UserController {
 
     private final UserService userService;
 
-    @Operation(summary = "使用者分頁查詢", description = "根據條件篩選並分頁顯示使用者紀錄")
+    @Operation(summary = "5.0.1 使用者分頁查詢", description = "根據條件篩選並分頁顯示使用者紀錄")
     @GetMapping
     public Result page(
             @Parameter(description = "頁碼 (預設 1)", example = "1")
@@ -46,6 +46,7 @@ public class UserController {
         return Result.success(pageBean);
     }
 
+    @Operation(summary = "5.0.2 創建使用者", description = "創建使用者")
     @PostMapping
     public Result saveOrUpdateUser(@RequestBody UserEntity user) {
 
@@ -63,7 +64,7 @@ public class UserController {
             return Result.error(operator + "失敗");
         }
     }
-
+    @Operation(summary = "5.0.3 修改使用者資訊", description = "修改使用者資訊")
     @PutMapping("/{id}")
     public Result updateUser(@RequestBody UserEntity user) {
 
@@ -76,8 +77,6 @@ public class UserController {
             return Result.error("修改失敗");
         }
     }
-
-
 
 
     /**

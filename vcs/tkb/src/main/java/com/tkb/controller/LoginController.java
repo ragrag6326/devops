@@ -22,7 +22,7 @@ public class LoginController {
 
     private final UserService userService;
 
-    @Operation(summary = "登入", description = "使用者身分驗證")
+    @Operation(summary = "1.0.0 登入", description = "使用者身分驗證")
     @PostMapping("/login")
     public Result login(@RequestBody LoginDTO Login) {
         String username = Login.getUsername();

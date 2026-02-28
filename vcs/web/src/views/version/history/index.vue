@@ -1,19 +1,167 @@
 <script setup>
-import { onMounted, ref , watch , nextTick , onUnmounted } from 'vue'
+import { onMounted, ref , watch , nextTick , onUnmounted, warn , computed } from 'vue'
 import { AnsiUp } from 'ansi_up';
 
-import { queryVersionPage , queryVersionById , deleteVersionById  , editRemark , getLatestSuccessVersion , getNextVersion , checkDeployable , updateJenkinsBuildId} from "@/api/version";
-import { triggerJenkinsBackendBuild , getJenkinsConsoleLog , getJenkinsPiplineNumber } from "@/api/jenkins";
+import { queryVersionPage , queryVersionById , deleteVersionById  , edit , getLatestSuccessVersion , getNextVersion , checkDeployable , updateJenkinsBuildId} from "@/api/version";
+import { triggerJenkinsBuild , getJenkinsConsoleLog , getJenkinsPiplineNumber } from "@/api/jenkins";
 import { deploying } from "@/api/deploy";
+import { getImageVersion , renewimage } from "@/api/monitor";
 
 import { ElMessage , ElMessageBox , ElLoading, sliderContextKey } from 'element-plus'
 import axios from 'axios';
 
+
 const token = ref ('');
+
 
 // ---------------- 版本數據列表 ----------------
 const versionList = ref([])
 const loading = ref(false)
+
+// 1. 從本地存儲獲取角色（建議給予預設值防止 null）
+const current_role = ref(localStorage.getItem('current_role') || 'GUEST');
+
+// 2. 定義專案分類（方便維護）
+const frontendProjects = ['go_nuxt'];
+const backendProjects = ['tkbgoapi', 'tkbtv'];
+
+const filteredProjectOptions = computed(() => {
+    return projectNameOptions.filter(option => {
+
+        // A. 如果是管理員，全看
+        if (current_role.value === 'ADMIN') return true;
+
+        // B. 前端使用者判斷
+        if (current_role.value === 'FRONTEND_USER') {
+            return frontendProjects.includes(option.value);
+        }
+
+        // C. 後端使用者判斷
+        if (current_role.value === 'BACKEND_USER') {
+            return backendProjects.includes(option.value);
+        }
+
+        // D. 其他角色預設看不到任何專案（或根據需求調整）
+        return false;
+    });
+});
+
+
+// ---------------- 退版相關變數 ----------------
+const rollbackDialogVisible = ref(false);
+const rollbackLoading = ref(false);
+const rollbackData = ref([]); 
+const rollbackForm = ref({
+    projectName: '', // 新增欄位紀錄目標專案
+    type: '',
+    version: ''
+});
+
+// 1. 開啟退版視窗
+const handleOpenRollback = () => {
+    rollbackDialogVisible.value = true;
+    
+    // 初始化：清空資料
+    rollbackData.value = [];
+    rollbackForm.value.type = '';
+    rollbackForm.value.version = '';
+    
+    // 如果搜尋欄有選專案，預設帶入 (searchForm 需從你的上下文取得)
+    if (searchForm.value.name) {
+        rollbackForm.value.projectName = searchForm.value.name;
+    } else {
+        rollbackForm.value.projectName = '';
+    }
+};
+
+// 2. 監聽：當「專案名稱」改變時，發送 API 取得版本清單
+watch(() => rollbackForm.value.projectName, async (newVal) => {
+    if (!newVal) return;
+    
+    rollbackLoading.value = true;
+    rollbackForm.value.type = '';    // 切換專案時重置類型
+    rollbackForm.value.version = ''; // 切換專案時重置版號
+    rollbackData.value = [];         // 清空舊數據
+
+    try {
+        // 發送 PATCH 請求
+        const res = await getImageVersion(newVal);
+        
+        if (res.code === 1) {
+            rollbackData.value = res.data; // 將回傳的陣列存入
+        } else {
+            ElMessage.error(res.msg || "取得版本資訊失敗");
+        }
+    } catch (error) {
+        console.error(error);
+        ElMessage.error("系統錯誤：無法取得版本清單");
+    } finally {
+        rollbackLoading.value = false;
+    }
+});
+
+// 3. 計算屬性：根據選取的 type (prod/backup)，篩選出對應的 versions 陣列
+const availableVersions = computed(() => {
+    if (!rollbackForm.value.type) return [];
+    
+    // 從 rollbackData 中找到符合 type 的那一個物件
+    const target = rollbackData.value.find(item => item.type === rollbackForm.value.type);
+    
+    // 回傳 versions 陣列，如果沒找到則回傳空陣列
+    return target ? target.versions : [];
+});
+
+// 4. 送出退版請求
+const submitRollback = async () => {
+    // 1. 解構變數
+    const { projectName, type, version } = rollbackForm.value;
+
+    // 2. 防呆
+    if (!projectName || !type || !version) {
+        ElMessage.warning("請完整選擇：專案、環境類型與版號");
+        return;
+    }
+    // 3. 處理使用者名稱 (防止 null 或 undefined)
+    const storedUser = localStorage.getItem('current_username');
+    const currentUser = storedUser ? storedUser.replace(/['"]+/g, '') : 'Unknown_User';
+    
+    // 顯示中文名稱用於確認
+    const typeLabel = type === 'prod' ? '正式機 (Prod)' : '備援機 (Backup)';
+
+    ElMessageBox.confirm(
+        `確定要將 [${projectName}] 的 ${typeLabel} 更新至版本 ${version} 嗎？`,
+        '退版確認',
+        { confirmButtonText: '確定執行', cancelButtonText: '取消', type: 'warning' }
+    ).then(async () => {
+        
+        const loading = ElLoading.service({ text: '正在發送更新指令...' });
+        
+        try {
+
+            // 呼叫更新 API
+            const res = await renewimage({
+                opertaionName : currentUser,
+                projectName: projectName,
+                nodeType: type, // 'prod' 或 'backup'
+                version: version
+            });
+
+            if (res.code === 1) {
+                ElMessage.success("指令發送成功！");
+                rollbackDialogVisible.value = false;
+                // search(); // 如果需要刷新列表可呼叫
+            } else {
+                ElMessage.error(res.msg || "更新失敗");
+            }
+        } catch (error) {
+            ElMessage.error("請求發生錯誤");
+        } finally {
+            loading.close();
+        }
+    });
+};
+
+// -------------------------------------------
 
 // 搜索欄
 const projectNameOptions = [
@@ -157,8 +305,14 @@ const versionForm = ref ({
     version: "",
     branch: "",
     remark: "",
-    jenkinsBuildId: ""
+    jenkinsBuildId: "" ,
+    deployType: ""
 })
+
+const deployTypeOptions = [
+    { label: "Main (正式機)", value: "prod" },
+    { label: "Backup (備援)", value: "backup" },
+]
 
 // 監聽表單中 env 變化
 watch(() => versionForm.value.env, async (newEnv) => {
@@ -217,7 +371,45 @@ watch(() => versionForm.value.env, async (newEnv) => {
             versionForm.value.branch = 'develop'; // Prod 通常固定分支
             ElMessage.success(`已自動帶入 Prod 部屬成功版本: ${prodVer}`);
         }
+    } catch (e) {
+        console.error(e);
+    }
+});
 
+// 監聽表單中 env 變化
+watch(() => versionForm.value.deployType, async () => {
+    
+    // 防呆：如果沒選專案，先不動作
+    if (!versionForm.value.deployType) return;
+    
+    const deployType = versionForm.value.deployType;
+    const version = versionForm.value.version;
+
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+
+    // 建立日期字串：2026/01/26
+    const dateStr = `${year}/${month}/${day}`;
+    
+    try {
+        // ===============
+        // 如選擇的是 backup
+        // ===============
+        if (deployType === 'backup') {
+            ElMessage.success(`備註已自動填入`);
+            versionForm.value.remark = `${dateStr} 備援機更新, 版號: ${version}`;
+            versionForm.value.branch = 'master';
+        } 
+        // ================
+        // 如選擇的是 Prod
+        // ================
+        else if (deployType === 'prod') {
+            ElMessage.success(`備註已自動填入`);
+            versionForm.value.remark = `${dateStr} 正式機更新, 版號: ${version}`;
+            versionForm.value.branch = 'master';
+        }
     } catch (e) {
         console.error(e);
     }
@@ -228,6 +420,7 @@ const rules = {
     name: [{ required: true, message: "請選擇專案", trigger: "change" }],
     env: [{ required: true, message: "請選擇環境", trigger: "change" }],
     branch: [{ required: true, message: "請輸入分支", trigger: "change" }],
+    deployType: [{ required: true, message: "請選擇部署類型", trigger: "change" }],
     version: [
         { required: true, message: "請輸版號 格式: 1.0.0", trigger: "change" },
         { pattern: /^[\d]{1}\.[\d]+\.[\d]+$/ , message: '請輸入有效的版號 範例: 1.0.0', trigger: 'blur'}
@@ -372,7 +565,7 @@ const submitVersionAddandEdit = async () => {
             
             if ( versionForm.value.id ) { 
                 // 修改
-                result = await editRemark(versionForm.value);
+                result = await edit(versionForm.value);
                 console.log('API回傳結果:', result);
                 
                 if ( result.code ) {
@@ -399,8 +592,8 @@ const submitVersionAddandEdit = async () => {
 
                     try{
                         // 解構賦值
-                        const { name: projectName, env: projectEnv, version } = versionForm.value;
-                        
+                        const { name: projectName, env: projectEnv, version , deployType } = versionForm.value;
+
                         // ==============================
                         // 步驟 1: 檢查是否可部署 (Check)
                         // =============================
@@ -420,11 +613,11 @@ const submitVersionAddandEdit = async () => {
                             projectName,
                             projectEnv,
                             version,
+                            nodeType : deployType,
                             user: 'Web-UI',
                         };
                         const deployResult = await deploying(deployParams);
                         console.log('deploying API回傳結果:', deployResult);
-
                         
                         if (!deployResult.code) {
                             throw new Error(deployResult.msg || "無法標記部署狀態");
@@ -433,20 +626,58 @@ const submitVersionAddandEdit = async () => {
                         console.log('部署紀錄 ID:', recordId);
 
                         versionForm.value.id = recordId;
-                        const editRemarkResult = await editRemark(versionForm.value);
-                        console.log('部署備註編輯結果:', editRemarkResult);
+                        
+                        const editParams = {
+                            id : recordId,
+                            projectName,
+                            projectEnv,
+                            version,
+                            remark: versionForm.value.remark
+                        };
 
-                        // ElMessage.success("通過版號檢查並標記部署狀態");
+
+                        const editResult = await edit(editParams);
+                        
+                        console.log(editResult);
+                        
+                        ElMessage.success("通過版號檢查並標記部署狀態");
 
                         // ==========================================
                         // 步驟 3: 觸發 Jenkins (Trigger Jenkins)
                         // ==========================================
-                        const jenkinsResult = await triggerJenkinsBackendBuild(projectName , projectEnv , versionForm.value.branch )
+                        const frontendProjects = ['go_nuxt'];
+
+                        let jenkinsResult;
+                        let jenkinsEnv = projectEnv;
+                        let type;
+                        
+                        // 判斷：如果專案名稱在前端清單中，呼叫前端 API；否則呼叫後端 API
+                        if (frontendProjects.includes(projectName)) {
+                            type = 'frontend'
+                            console.log("前端");
+                            
+                            if (projectEnv === 'prod' && deployType === 'backup') {
+                                jenkinsEnv = 'prod-backup';
+                            }
+
+                            if (projectEnv === 'prod' && deployType === 'prod') {
+                                jenkinsEnv = 'prod';
+                            }
+
+                            console.log(`[部署資訊] 專案:${projectName} | 類型:${type} | 環境參數:${jenkinsEnv}`);
+                            
+                            jenkinsResult = await triggerJenkinsBuild(projectName, jenkinsEnv, versionForm.value.branch , type);
+                            
+                        } else {
+                            type = 'backend'
+                            console.log(`檢測到後端專案: ${projectName}，觸發 ${type} Jenkins Job`);
+                            jenkinsResult = await triggerJenkinsBuild(projectName, projectEnv, versionForm.value.branch , type );
+                        }
 
                         if (jenkinsResult.status !== 201) {
                             throw new Error(jenkinsResult.msg || "Jenkins 觸發失敗");
                         }
-
+                        
                         // 更新 Loading 文字
                         loadingInstance.setText('請求發送成功，等待 Jenkins 排程...');
                         //ElMessage.success('Jenkins 部署請求發送成功！');
@@ -548,7 +779,7 @@ const handleViewLog = async (row) => {
     // 1. 設定 Dialog 標題
     currentLogTitle.value = `專案: ${row.projectName} 環境: ${row.projectEnv} 版號: ${row.version}`;
 
-    const buildId = row.jenkinsBuildId || row.jenkins_build_id; 
+    const buildId = row.jenkinsBuildId || row.jenkins_build_id;
     let jobName = "";
     let pipelineName = "";
     let safePipelineUrl = 'Not yet generate pipeline_url , try again later when job finished';
@@ -565,7 +796,11 @@ const handleViewLog = async (row) => {
         jobName=`${jobName}dev`
     } else {
         pipelineName=`${jobName}pipeline`
-        jobName=`${jobName}prod`
+        if (row.nodeType != null &&  row.nodeType == 'backup'){
+            jobName=`${jobName}prod-${row.nodeType}`
+        } else {
+            jobName=`${jobName}prod`
+        }
         pipeline_link = await getJenkinsPiplineNumber(pipelineName , jobName , buildId);
     }
 
@@ -733,6 +968,39 @@ const pullLogRecursive = async (env, buildNumber, startOffset = 0) => {
 //}
 
 
+const nodeTypeText = {
+  prod: '正式機',
+  backup: '備援機',
+  dev: '測試機' ,
+  loacl: '地端測試'
+};
+
+// ------------------------------------------------------------------------------------------- 
+// 節點狀態
+const customStyles = {
+  prod: {
+    bg: '#f0f9eb',     // 淺綠背景
+    text: '#67c23a',   // 深綠文字
+    border: '#e1f3d8'  // 邊框顏色
+  },
+  backup: {
+    bg: '#fdf6ec',     // 淺橘背景
+    text: '#e6a23c',   // 深橘文字
+    border: '#faecd8'
+  },
+  dev: {
+    bg: '#ecf5ff',     // 淺藍背景
+    text: '#409eff',   // 深藍文字
+    border: '#d9ecff'
+  },
+ loacl: {
+    bg: '#ecf5ff',     // 淺藍背景
+    text: '#409eff',   // 深藍文字
+    border: '#d9ecff'
+  },
+};
+
+
 // ------------------------------------------------------------------------------------------- 
 // 獲取 token
 const getToken = () => {
@@ -740,6 +1008,7 @@ const getToken = () => {
 }
 
 // ------------------------------------------------------------------------------------------- 
+
 onMounted (() => {
     search();
     getToken();  // 獲取 token
@@ -753,7 +1022,7 @@ onMounted (() => {
 
     <!-- 搜索欄 -->
     <div id="container">
-
+        <!-- {{ versionList }} -->
         <el-form :inline="true" :model="searchForm" class="demo-form-inline">
             
             <el-form-item label="專案名稱">
@@ -783,17 +1052,35 @@ onMounted (() => {
         <el-button el-button type="primary" @click="InitAddForm">新增版號</el-button>
         <el-button el-button type="danger" :disabled="multipleSelection.length === 0" @click="handleBatchDelete"> 批量刪除</el-button>
 
+        <el-button type="warning" @click="handleOpenRollback">
+            <el-icon><RefreshLeft /></el-icon> 版本退版 (Rollback)
+        </el-button>
+
     </div>
 
     
     <!-- 數據表格顯示 -->
     <div class="table-container">
-
+        
         <el-table :data="versionList" border style="width:100%" v-loading="loading" @selection-change="handleSelectionChange">
+                
                 <el-table-column type="selection" width="35" align="center" />
                 <el-table-column prop="id" label="編號" min-width="20"/>
                 <el-table-column prop="projectName" label="專案名稱" min-width="30" show-overflow-tooltip />
                 <el-table-column prop="projectEnv" label="環境" min-width="30" />
+          
+                <el-table-column prop="nodeType" label="節點" min-width="30">
+                    <template #default="scope">
+                        <el-tag 
+                        :color="customStyles[scope.row.nodeType]?.bg" 
+                        :style="{ color: customStyles[scope.row.nodeType]?.text, borderColor: customStyles[scope.row.nodeType]?.border }"
+                        effect="light"
+                        >
+                        {{ nodeTypeText[scope.row.nodeType] || '測試機' }}
+                        </el-tag>
+                    </template>
+                </el-table-column>
+
                 <el-table-column prop="version" label="版本" min-width="30"/>
                 <el-table-column prop="state" label="狀態" min-width="35">
                     <template #default="scope">
@@ -816,6 +1103,7 @@ onMounted (() => {
                 <el-table-column label="查看jenkins操作日誌" min-width="35" align="center">
                     <template #default="scope">
                         <el-tooltip content="查看建置日誌" placement="top">
+                            
                             <el-button circle type="info" plain :disabled="!scope.row.jenkinsBuildId" @click="handleViewLog(scope.row)">
                                 <el-icon ><Document /></el-icon>
                             </el-button>
@@ -842,20 +1130,102 @@ onMounted (() => {
         />
     </div>
 
+    <!-- 退版 dialog -->
+    <el-dialog v-model="rollbackDialogVisible" title="遠端環境退版 (Rollback)" width="500px">
+        
+        <el-form :model="rollbackForm" label-width="100px" v-loading="rollbackLoading">
+            
+            <el-form-item label="專案名稱" required>
+                <el-select 
+                    v-model="rollbackForm.projectName" 
+                    placeholder="請選擇專案" 
+                    style="width: 50%" 
+                    filterable
+                >
+                    <el-option 
+                        v-for="item in filteredProjectOptions" 
+                        :key="item.value" 
+                        :label="item.label" 
+                        :value="item.value" 
+                    />
+                </el-select>
+            </el-form-item>
+
+            <el-form-item label="環境類型" required v-if="rollbackData.length > 0">
+                <el-radio-group v-model="rollbackForm.type" @change="rollbackForm.version = ''">
+                    <el-radio 
+                        v-for="item in rollbackData" 
+                        :key="item.type" 
+                        :label="item.type" 
+                        border
+                    >
+                        {{ 
+                            item.type == 'prod' ? '正式機 (Prod)' : 
+                            item.type == 'backup' ? '備援機 (Backup)' : 
+                            item.type == 'dev' ? '測試機 (dev)' :
+                            item.type == 'local' ? '地端測試 (local)' : '未知'
+                        }}
+                    </el-radio>
+                </el-radio-group>
+            </el-form-item>
+
+            <el-form-item label="選擇版號" required v-if="rollbackForm.type">
+                <el-select v-model="rollbackForm.version" placeholder="請選擇版本" style="width: 100%">
+                    <el-option 
+                        v-for="ver in availableVersions" 
+                        :key="ver" 
+                        :label="ver" 
+                        :value="ver" 
+                    />
+                </el-select>
+            </el-form-item>
+
+            <div v-if="rollbackForm.projectName && rollbackData.length === 0 && !rollbackLoading" style="color: #909399; margin-left: 100px;">
+                此專案目前查無可退版資訊
+            </div>
+
+        </el-form>
+
+        <template #footer>
+            <el-button @click="rollbackDialogVisible = false">取消</el-button>
+            <el-button 
+                type="danger" 
+                @click="submitRollback" 
+                :disabled="!rollbackForm.version"
+            >
+                執行退版
+            </el-button>
+        </template>
+    </el-dialog>
+
+
     <!-- 新增版號(add) dialog -->
+     
     <el-dialog v-model="addDialogVisible" :title="formTitle" width="600px" class="custom-edit-dialog">
 
         <el-form :model="versionForm" :rules="rules" ref="versionFormRef" label-width="90px">
-
+            <!-- {{ versionForm }} -->
             <el-form-item label="專案" prop="name">
                 <el-select v-model="versionForm.name" style="width:50%">
-                    <el-option v-for="n in projectNameOptions" :key="n.value" :label="n.label" :value="n.value" />
+                    <!-- <el-option v-for="n in projectNameOptions" :key="n.value" :label="n.label" :value="n.value" /> -->
+                    <el-option 
+                        v-for="item in filteredProjectOptions" 
+                        :key="item.value" 
+                        :label="item.label" 
+                        :value="item.value" 
+                    />
                 </el-select>
             </el-form-item>
 
             <el-form-item label="環境" prop="env">
                 <el-select v-model="versionForm.env" style="width:50%">
                     <el-option v-for="e in projectEnvOptions" :key="e.value" :label="e.label" :value="e.value" />
+                </el-select>
+            </el-form-item>
+
+            <el-form-item label="部署類型" prop="deployType" v-if="versionForm.env === 'prod' && versionForm.name === 'go_nuxt' ">
+                <el-select v-model="versionForm.deployType" placeholder="請選擇類型" style="width:50%">
+                    <el-option v-for="item in deployTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
                 </el-select>
             </el-form-item>
 

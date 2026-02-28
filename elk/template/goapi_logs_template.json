@@ -1,6 +1,6 @@
 // PUT _index_template/tv_logs_template
 {
-  "index_patterns": ["tv_*-logs-*"],
+  "index_patterns": ["go_api_*-logs-*"],
   "priority": 100,
   "template": {
     "settings": {
@@ -22,7 +22,7 @@
     
         "msg_body": {
           "type": "text",
-          "analyzer": "standard" 
+          "analyzer": "ik_smart" 
         },
 
         "site": { "type": "keyword" },

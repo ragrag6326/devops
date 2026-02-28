@@ -210,7 +210,7 @@ onMounted(() => {
         </div>
 
       <footer class="app-footer">
-        © 2025 版本控制管理系統
+        © 2026 版本控制管理系統
       </footer>
     </div>
   </div>

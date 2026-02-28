@@ -3,6 +3,7 @@ package com.tkb.service.impl;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.github.pagehelper.Page;
 import com.github.pagehelper.PageHelper;
+import com.tkb.dto.ImageInfoDTO;
 import com.tkb.entity.GitlabMrEntity;
 import com.tkb.entity.SystemAudLogEntity;
 import com.tkb.entity.UserEntity;
@@ -20,7 +21,10 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Service
@@ -248,4 +252,123 @@ public class MonitorServiceImpl extends ServiceImpl<SystemAudLogMapper, SystemAu
         // 3. 封裝 pageBean 對象
         return new PageBean(pageList.getTotal(), pageList.getResult());
     }
+
+    @Override
+    public List<ImageInfoDTO> getDockerImageVersions(String projectName) {
+        List<ImageInfoDTO> result = new ArrayList<>();
+        // 定義你想區分的類型
+        Map<String, List<String>> versionMap = new HashMap<>();
+        versionMap.put("prod", new ArrayList<>());
+        versionMap.put("backup", new ArrayList<>());
+
+        String scriptPath = "/opt/vcs/tools/" + projectName + "/get_images.sh";
+        ProcessBuilder pb = new ProcessBuilder("bash", scriptPath, projectName);
+
+        try {
+            Process process = pb.start();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    // line 格式範例: frontend-prod/go_nuxt-backup:1.0.6
+                    String[] parts = line.split(":");
+                    if (parts.length < 2) continue;
+
+                    String repoName = parts[0];
+                    String version = parts[1];
+
+                    // 根據 repo 名稱判斷是 prod 還是 backup
+                    if (repoName.contains("-prod")) {
+                        versionMap.get("prod").add(version);
+                    } else if (repoName.contains("-backup")) {
+                        versionMap.get("backup").add(version);
+                    }
+                }
+            }
+            process.waitFor();
+
+            // 轉換為前端需要的格式
+            versionMap.forEach((type, versions) -> {
+                if (!versions.isEmpty()) {
+                    result.add(new ImageInfoDTO(type, versions));
+                }
+            });
+
+        } catch (Exception e) {
+            log.error("抓取版本失敗", e);
+        }
+        return result;
+    }
+
+    @Override
+    public String renewImage(String opertaionName , String projectName, String nodeType, String version) {
+        // 1. 基本檢核 (防止路徑遍歷攻擊)
+        if (!projectName.matches("^[a-zA-Z0-9_]+$")) {
+            return "非法專案名稱";
+        }
+
+        // 更新image腳本位置
+        String scriptPath = "/opt/vcs/tools/"+ projectName +"/version_renew.sh";
+        ProcessBuilder pb = new ProcessBuilder("bash", scriptPath, nodeType , version);
+        pb.redirectErrorStream(true);
+
+        try {
+            log.info("開始執行退版腳本: {} {} {}", scriptPath, nodeType, version);
+            Process process = pb.start();
+
+            // 讀取腳本的標準輸出 (建議用 StringBuilder 收集錯誤訊息，以便 Debug)
+            StringBuilder outputBuffer = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    log.info("Script Output: {}", line);
+                    outputBuffer.append(line).append("\n"); // 收集 log
+                }
+            }
+            // 等待腳本執行結束
+            int exitCode = process.waitFor();
+
+            if (exitCode == 0) {
+                // --- 執行成功 ---
+                String successMsg = String.format("將 (%s) 更新版號為 %s", nodeType, version);
+                saveAuditLog( opertaionName , projectName, successMsg, SystemAudLogState.SUCCESS.getCode());
+
+                log.info("{} 切換並記錄完畢 目標:{} 版號:{}", projectName, nodeType, version);
+                return projectName + " " + nodeType + " " + version + " 版本更新完成";
+            } else {
+                // --- 執行失敗 ---
+                String errorMsg = String.format("(%s) 更新版號為 %s 失敗", nodeType, version);
+                saveAuditLog(opertaionName ,projectName, errorMsg, SystemAudLogState.FAILED.getCode());
+
+                log.warn("{} 更新失敗 ExitCode:{} \n輸出:{}", projectName, exitCode, outputBuffer.toString());
+                return "更新失敗 (Script ExitCode: " + exitCode + ")";
+            }
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt(); // 恢復中斷狀態
+            log.error("執行腳本被中斷", e);
+            return "執行被中斷";
+        } catch (IOException e) {
+            log.error("執行腳本時發生 I/O 錯誤", e);
+            return "執行發生異常";
+        }
+    }
+
+    /**
+     * 提取共用的 Log 寫入邏輯
+     */
+    private boolean saveAuditLog(String opertaionName , String projectName, String action, Integer status) {
+        SystemAudLogEntity audLog = new SystemAudLogEntity();
+        audLog.setProjectName(projectName);
+        audLog.setAction(action);
+        audLog.setStatus(status);
+
+        // 設定時間：去除毫秒
+        audLog.setOperationTime(LocalDateTime.now().withNano(0));
+
+        //操作人員
+        audLog.setOperator(opertaionName);
+
+        return this.save(audLog);
+    }
 }
+

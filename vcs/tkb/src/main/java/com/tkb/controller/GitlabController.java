@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDate;
 import java.util.List;
 
-@Tag(name = "Gitlab", description = "取得Gitlab 人員MR紀錄並整合至版號中")
+@Tag(name = "3.0.0 Gitlab", description = "取得Gitlab 人員MR紀錄並整合至版號中")
 @Slf4j
 @RequiredArgsConstructor
 @RestController
@@ -30,7 +30,7 @@ public class GitlabController {
      * @param projectName
      * @return
      */
-    @Operation(summary = "資料更新", description = "更新 gitlab 的 MR 數據")
+    @Operation(summary = "3.0.1 資料更新", description = "更新 gitlab 的 MR 數據")
     @GetMapping("/sync/{projectName}")
     public Result<String> getGitlabInfo (
             @Parameter(description = "同步的專案名稱，在application.yml修改", required = true, example = "tkbtv")
@@ -50,7 +50,7 @@ public class GitlabController {
       * @param end
       * @return
       */
-    @Operation(summary = "MR紀錄分頁顯示", description = "MR紀錄整合後提供分頁查詢")
+    @Operation(summary = "3.0.2 MR紀錄分頁顯示", description = "MR紀錄整合後提供分頁查詢")
     @GetMapping("/list")
     public Result page(
 
@@ -80,7 +80,7 @@ public class GitlabController {
         return Result.success(pageBean);
     }
 
-    @Operation(summary = "查詢專案待處理 MR 列表", description = "根據專案名稱獲取所有狀態為 pending 的 Merge Requests")
+    @Operation(summary = "3.0.3 查詢專案待處理 MR 列表", description = "根據專案名稱獲取所有狀態為 pending 的 Merge Requests")
     @GetMapping("/projects/{projectName}/mrs/pending")
     public Result<List<GitlabMrEntity>> listPendingMrs (
             @Parameter(description = "專案名稱", example = "tkbgoapi")

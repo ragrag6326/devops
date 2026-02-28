@@ -82,12 +82,11 @@ filebeat.inputs:
     site: vcs
   fields_under_root: true
 
-# ================= 正式機(blue) go_api_test ==================
+# ================= 正式機 go_api_test ==================
 - type: log
   enabled: true
-  id: tkbgo_api_test
+  id: tkbgo_api_blue
   paths:
-    #- /data/logs/go_api_test/logs/tkbgo_api*.log
     - /data/logs/tkbgoapi/blue/logs/*.log
   exclude_files: ['\.gz$']
 
@@ -99,18 +98,17 @@ filebeat.inputs:
 
   fields:
     log_type: go_spring_log
-    env: go_api_test
-    site: go_api_test
+    env: go_api_blue
+    site: go_api_blue
   fields_under_root: true
 
 
 
-# ================= 備援機(green) go_api_backup ==================
+# ================= 備援機  go_api_backup ==================
 - type: log
   enabled: true
-  id: tkbgo_api_backup
+  id: tkbgo_api_green
   paths:
-    #- /data/logs/go_api_backup/logs/*.log
     - /data/logs/tkbgoapi/green/logs/*.log
   exclude_files: ['\.gz$']
 
@@ -121,8 +119,66 @@ filebeat.inputs:
 
   fields:
     log_type: go_spring_log
-    env: go_api_backup
-    site: go_api_backup
+    env: go_api_green
+    site: go_api_green
+  fields_under_root: true
+
+
+# ================= 撥放器 player_struts2_info ==================
+- type: log
+  enabled: true
+  id: player_struts2_info
+
+  # 處理 Java 日誌內容，待會要再確認日誌內容進行調整
+  multiline.type: pattern
+  multiline.pattern: '^\[[A-Z\s]+\]\s+\[[0-9]{4}/[0-9]{2}/[0-9]{2}'
+  multiline.negate: true
+  multiline.match: after
+
+  paths:
+    - /data/logs/player/logs/player_info-*.log
+
+  exclude_files: ['\.gz$']
+
+  fields:
+    log_type: struts2
+    project: player
+    env: production
+  fields_under_root: true
+
+# ================= 撥放器 player_access_log ==================
+- type: log
+  enabled: true
+  id: player_access_log
+  # Access Log 一行一筆
+  paths:
+    - /data/logs/player/logs/localhost_access_log.*.txt
+  exclude_files: ['\.gz$']
+  fields:
+    log_type: struts2
+    project: player
+    log_sub_type: access
+    env: production
+  fields_under_root: true
+
+
+# ================= 撥放器 player_api_Spring Boot ==================
+- type: log
+  enabled: true
+  id: player_springboot_api
+
+  multiline.type: pattern
+  multiline.pattern: '^\d{4}-\d{2}-\d{2}'
+  multiline.negate: true
+  multiline.match: after
+
+  paths:
+    - /data/logs/player_api/logs/player_api.*.log
+  exclude_files: ['\.gz$']
+  fields:
+    log_type: spring_boot
+    project: player_api
+    env: production
   fields_under_root: true
 
 

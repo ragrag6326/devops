@@ -32,6 +32,9 @@ public class VersionEntity {
     @Schema(description = "狀態 (0=DEPLOYING, 1=SUCCESS, 2=FAILED, 3=ROLLED_BACK)", example = "1")
     private int state;
 
+    @Schema(description = "節點狀態", example = "prod/backup")
+    private String nodeType;
+
     @Schema(description = "備註說明", example = "緊急修復登入 Bug")
     private String remark;
 
