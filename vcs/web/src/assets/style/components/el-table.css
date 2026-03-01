@@ -1,0 +1,56 @@
+/* ============================================
+   el-table 專用樣式 - 全新設計
+   ============================================ */
+
+.el-table {
+  --el-table-bg-color: var(--table-bg-color) !important;
+  --el-table-tr-bg-color: var(--table-bg-color) !important;
+  --el-table-header-bg-color: var(--table-header-bg) !important;
+  --el-table-row-hover-bg-color: var(--table-hover-bg) !important;
+  --el-table-border-color: var(--table-border-color) !important;
+  --el-table-text-color: var(--table-text-color) !important;
+  background-color: var(--table-bg-color) !important;
+  color: var(--table-text-color) !important;
+  border-radius: var(--radius) !important;
+  overflow: hidden;
+}
+
+.el-table::before {
+  display: none !important;
+}
+
+.el-table th.el-table__cell {
+  background: var(--table-header-bg) !important;
+  color: var(--table-header-text-color) !important;
+  font-weight: 600 !important;
+  font-size: 12px !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+  border-bottom: 1px solid var(--table-border-color) !important;
+  padding: 14px 16px !important;
+}
+
+.el-table td.el-table__cell {
+  border-bottom: 1px solid var(--table-border-color) !important;
+  padding: 14px 16px !important;
+  color: var(--table-text-color) !important;
+}
+
+.el-table .el-table__body tr:hover > td {
+  background: var(--table-hover-bg) !important;
+}
+
+.el-table--striped .el-table__body tr.el-table__row--striped td {
+  background: var(--panel-alt) !important;
+}
+
+.el-table .el-table__inner-wrapper::before {
+  display: none !important;
+}
+
+/* 表格外層卡片樣式（若包在 el-card 內） */
+.el-table .el-card {
+  background: var(--panel) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: var(--radius) !important;
+}

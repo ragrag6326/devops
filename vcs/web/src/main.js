@@ -13,9 +13,12 @@ import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 // 主題初始化函數放在這裡
 import { initTheme } from '@/utils/theme';
 
-import '@/assets/style/theme-color.css'
-import '@/assets/style/el-dialog.css'
-import '@/assets/style/el-message.css'
+import '@/assets/style/theme.css'
+import '@/assets/style/components/element-plus.css'
+import '@/assets/style/components/el-table.css'
+import '@/assets/style/components/el-layout.css'
+import '@/assets/style/components/el-dialog.css'
+import '@/assets/style/components/el-message.css'
 
 import App from './App.vue'
 

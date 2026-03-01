@@ -1,0 +1,51 @@
+/* ============================================
+   Element Plus Dialog 覆蓋（支援深淺主題）
+   ============================================ */
+
+.el-dialog,
+.el-message-box {
+  background: var(--el-dialog-bg) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  border: 1px solid var(--el-dialog-border) !important;
+  border-radius: var(--radius) !important;
+  box-shadow: var(--shadow) !important;
+}
+
+.el-dialog__title,
+.el-message-box__title {
+  color: var(--el-dialog-title) !important;
+  font-weight: 600 !important;
+}
+
+.el-dialog__body,
+.el-message-box__message {
+  color: var(--el-dialog-body) !important;
+}
+
+.el-dialog__headerbtn .el-dialog__close {
+  color: var(--muted) !important;
+}
+
+.el-dialog__headerbtn:hover .el-dialog__close {
+  color: var(--text) !important;
+}
+
+.el-input__wrapper {
+  background-color: var(--panel) !important;
+  box-shadow: 0 0 0 1px var(--border-color) inset !important;
+}
+
+.el-input__inner {
+  color: var(--text) !important;
+}
+
+.el-input__wrapper.is-focus {
+  box-shadow: 0 0 0 1px var(--brand) inset !important;
+}
+
+.table-actions {
+  margin-bottom: 20px;
+  display: flex;
+  justify-content: flex-start;
+}

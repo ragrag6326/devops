@@ -1,0 +1,170 @@
+/* ============================================
+   Element Plus 全域覆蓋 - 按鈕、表單、輸入框
+   使用專案 CSS 變數，支援深淺主題
+   ============================================ */
+
+/* --- 按鈕 el-button --- */
+.el-button {
+  border-radius: var(--radius-sm) !important;
+  font-weight: 500 !important;
+  transition: all 0.2s ease !important;
+}
+
+.el-button--primary {
+  background: var(--brand) !important;
+  border-color: var(--brand) !important;
+  color: #fff !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+}
+
+.el-button--primary:hover,
+.el-button--primary:focus {
+  background: var(--brand-strong) !important;
+  border-color: var(--brand-strong) !important;
+  color: #fff !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--brand) 35%, transparent) !important;
+}
+
+.el-button--success {
+  background: var(--success) !important;
+  border-color: var(--success) !important;
+}
+
+.el-button--warning {
+  background: var(--warning) !important;
+  border-color: var(--warning) !important;
+}
+
+.el-button--danger {
+  background: var(--danger) !important;
+  border-color: var(--danger) !important;
+}
+
+.el-button--info,
+.el-button--default {
+  background: var(--panel) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text) !important;
+}
+
+.el-button--info:hover,
+.el-button--default:hover {
+  background: var(--panel-alt) !important;
+  border-color: var(--brand) !important;
+  color: var(--brand) !important;
+}
+
+/* --- 表單 el-form --- */
+.el-form-item__label {
+  color: var(--text) !important;
+  font-weight: 500 !important;
+}
+
+.el-form-item__error {
+  color: var(--danger) !important;
+}
+
+/* --- 輸入框 el-input --- */
+.el-input__wrapper {
+  background-color: var(--panel) !important;
+  box-shadow: 0 0 0 1px var(--border-color) inset !important;
+  border-radius: var(--radius-sm) !important;
+  transition: box-shadow 0.2s ease !important;
+}
+
+.el-input__wrapper:hover {
+  box-shadow: 0 0 0 1px var(--muted) inset !important;
+}
+
+.el-input__wrapper.is-focus {
+  box-shadow: 0 0 0 2px var(--brand) inset !important;
+}
+
+.el-input__inner {
+  color: var(--text) !important;
+}
+
+.el-input__inner::placeholder {
+  color: var(--text-placeholder) !important;
+}
+
+/* --- 選擇器 el-select --- */
+.el-select .el-input__wrapper {
+  background-color: var(--panel) !important;
+}
+
+/* --- 下拉選單 el-select dropdown --- */
+.el-select-dropdown {
+  background: var(--panel) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: var(--radius-sm) !important;
+  box-shadow: var(--shadow-md) !important;
+}
+
+.el-select-dropdown__item {
+  color: var(--text) !important;
+}
+
+.el-select-dropdown__item.hover,
+.el-select-dropdown__item:hover {
+  background: var(--panel-alt) !important;
+}
+
+.el-select-dropdown__item.selected {
+  color: var(--brand) !important;
+  font-weight: 500 !important;
+}
+
+/* --- 日期選擇器 el-date-picker --- */
+.el-picker-panel {
+  background: var(--panel) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: var(--radius) !important;
+}
+
+/* --- 分頁 el-pagination --- */
+.el-pagination {
+  --el-pagination-bg-color: transparent !important;
+  --el-pagination-button-color: var(--text) !important;
+  --el-pagination-hover-color: var(--brand) !important;
+}
+
+.el-pagination .el-pager li {
+  background: var(--panel) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border-color) !important;
+}
+
+.el-pagination .el-pager li.is-active {
+  background: var(--brand) !important;
+  border-color: var(--brand) !important;
+  color: #fff !important;
+}
+
+.el-pagination .btn-prev,
+.el-pagination .btn-next {
+  background: var(--panel) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border-color) !important;
+}
+
+/* --- 卡片 el-card --- */
+.el-card {
+  background: var(--panel) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: var(--radius) !important;
+  box-shadow: var(--shadow) !important;
+}
+
+.el-card__header {
+  color: var(--text) !important;
+  font-weight: 600 !important;
+  border-bottom: 1px solid var(--border-color) !important;
+  padding: 16px 20px !important;
+}
+
+.el-card__body {
+  color: var(--text) !important;
+  padding: 20px !important;
+}

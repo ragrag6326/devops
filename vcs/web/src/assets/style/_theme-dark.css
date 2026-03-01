@@ -1,0 +1,94 @@
+/* ============================================
+   深色主題 - 全新設計
+   html[data-theme='dark']
+   ============================================ */
+
+html[data-theme='dark'] {
+  /* --- 品牌與主色 --- */
+  --brand: #38bdf8;
+  --brand-strong: #0ea5e9;
+  --brand-muted: rgba(56, 189, 248, 0.15);
+
+  /* --- 背景 --- */
+  --bg: #0f172a;
+  --panel: #1e293b;
+  --panel-alt: #334155;
+
+  /* --- 邊框 --- */
+  --border-color: rgba(148, 163, 184, 0.15);
+  --border-color-light: rgba(148, 163, 184, 0.1);
+
+  /* --- 文字 --- */
+  --text: #f1f5f9;
+  --muted: #94a3b8;
+  --text-placeholder: #64748b;
+
+  /* --- 狀態色 --- */
+  --accent: #fbbf24;
+  --danger: #f87171;
+  --success: #34d399;
+  --warning: #fbbf24;
+  --info: #94a3b8;
+
+  /* --- 圓角與陰影 --- */
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
+
+  /* --- 特殊 --- */
+  --body-bg-image: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(56, 189, 248, 0.15), transparent);
+  --navbar-bg: rgba(15, 23, 42, 0.85);
+  --glass-bg: rgba(30, 41, 59, 0.8);
+  --glass-border: rgba(255, 255, 255, 0.08);
+
+  /* --- 表格 --- */
+  --table-text-color: #cbd5e1;
+  --table-header-text-color: #94a3b8;
+  --table-border-color: rgba(255, 255, 255, 0.06);
+  --table-bg-color: transparent;
+  --table-header-bg: rgba(255, 255, 255, 0.03);
+  --table-hover-bg: rgba(255, 255, 255, 0.05);
+
+  /* --- Element Plus 對應 --- */
+  --el-color-primary: var(--brand);
+  --el-color-primary-light-3: #7dd3fc;
+  --el-color-primary-light-5: #38bdf8;
+  --el-color-primary-light-7: rgba(56, 189, 248, 0.2);
+  --el-color-primary-light-8: rgba(56, 189, 248, 0.15);
+  --el-color-primary-light-9: rgba(56, 189, 248, 0.1);
+  --el-color-success: var(--success);
+  --el-color-warning: var(--warning);
+  --el-color-danger: var(--danger);
+  --el-color-info: var(--info);
+  --el-border-radius-base: var(--radius-sm);
+  --el-border-radius: var(--radius);
+  --el-bg-color: var(--panel);
+  --el-bg-color-page: var(--bg);
+  --el-bg-color-overlay: var(--panel);
+  --el-text-color-primary: var(--text);
+  --el-text-color-regular: var(--text);
+  --el-text-color-secondary: var(--muted);
+  --el-text-color-placeholder: var(--text-placeholder);
+  --el-border-color: var(--border-color);
+  --el-border-color-light: var(--border-color-light);
+  --el-border-color-lighter: rgba(255, 255, 255, 0.06);
+  --el-fill-color: var(--panel-alt);
+  --el-fill-color-light: rgba(255, 255, 255, 0.05);
+  --el-fill-color-blank: var(--panel);
+  --el-box-shadow: var(--shadow-md);
+  --el-box-shadow-light: var(--shadow);
+
+  /* --- 元件覆蓋 --- */
+  --el-message-bg: var(--panel);
+  --el-message-border: var(--border-color);
+  --el-message-text: var(--text);
+  --el-dialog-bg: var(--panel);
+  --el-dialog-border: var(--border-color);
+  --el-dialog-title: var(--text);
+  --el-dialog-body: var(--muted);
+  --primary-color: var(--brand);
+  --secondary-color: #f472b6;
+  --text-main: var(--text);
+  --text-sub: var(--muted);
+}

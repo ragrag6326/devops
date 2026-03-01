@@ -6,7 +6,7 @@ import { toggleTheme } from '@/utils/theme';
 import { 
     EditPen, SwitchButton, Promotion, Message, 
     User, HomeFilled, Avatar, Money, TrendCharts, Menu,
-    ArrowRight, ArrowDown
+    ArrowRight, ArrowDown, Sunny, Moon
 } from '@element-plus/icons-vue';
 
 const router = useRouter();
@@ -183,22 +183,14 @@ onMounted(() => {
           <h2 class="page-title">{{ '版本控制平台' }}</h2>
         </div>
         <div class="header-right">
-            
-            <button @click="handleToggle" class="theme-btn">
-                <el-icon v-if="isDark"><Moon /></el-icon>
-                <el-icon v-else><Sunny /></el-icon>
-                    切換主題
+            <button @click="handleToggle" class="header-btn theme-btn" :title="isDark ? '切換至淺色' : '切換至深色'">
+                <el-icon class="header-btn-icon"><Moon v-if="isDark" /><Sunny v-else /></el-icon>
+                <span class="header-btn-text">切換主題</span>
             </button>
-
-          <!-- <button class="action-btn" @click="changePassword">
-            <el-icon><EditPen /></el-icon>
-            <a>修改密碼</a>
-          </button> -->
-
-          <div class="divider"></div>
-          <button class="action-btn logout-btn" @click="logout">
-            <el-icon><SwitchButton/></el-icon>
-            <a>退出</a>
+          <div class="header-divider"></div>
+          <button class="header-btn logout-btn" @click="logout">
+            <el-icon class="header-btn-icon"><SwitchButton /></el-icon>
+            <span class="header-btn-text">退出</span>
           </button>
         </div>
       </header>
@@ -217,27 +209,16 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* --- 全局變量定義 --- */
-:root {
-    --primary-color: #6366f1; /* Indigo */
-    --secondary-color: #ec4899; /* Pink */
-    --bg-dark: #0f172a;
-    --glass-bg: rgba(30, 41, 59, 0.7);
-    --glass-border: rgba(255, 255, 255, 0.08);
-    --text-main: #f1f5f9;
-    --text-sub: #94a3b8;
+/* 使用主題變數，不覆寫 :root，以支援深淺主題 */
+.app-container {
     --sidebar-width: 260px;
     --header-height: 70px;
     --transition-speed: 0.3s;
-}
-
-/* 確保全屏且無滾動條 (內容區內部滾動) */
-.app-container {
     display: flex;
     width: 100vw;
     height: 100vh;
-    background-color: var(--bg-dark);
-    color: var(--text-main);
+    background-color: var(--bg);
+    color: var(--text);
     font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif;
     overflow: hidden;
     position: relative;
@@ -261,9 +242,9 @@ onMounted(() => {
 .sidebar {
     width: var(--sidebar-width);
     height: 100%;
-    background: var(--glass-bg);
+    background: var(--panel);
     backdrop-filter: blur(12px);
-    border-right: 1px solid var(--glass-border);
+    border-right: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
     z-index: 10;
@@ -276,7 +257,7 @@ onMounted(() => {
     display: flex;
     align-items: center;
     padding: 0 24px;
-    border-bottom: 1px solid var(--glass-border);
+    border-bottom: 1px solid var(--border-color);
 }
 
 .logo-icon {
@@ -297,9 +278,7 @@ onMounted(() => {
     font-size: 16px;
     font-weight: 600;
     letter-spacing: 0.5px;
-    background: linear-gradient(to right, #fff, #cbd5e1);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    color: var(--muted);
 }
 
 /* --- 導航菜單 --- */
@@ -320,18 +299,18 @@ onMounted(() => {
     border-radius: 12px;
     cursor: pointer;
     transition: all 0.2s ease;
-    color: var(--text-sub);
+    color: var(--muted);
     position: relative;
     user-select: none;
 }
 
 .menu-item:hover {
-    background: rgba(255, 255, 255, 0.05);
-    color: #fff;
+    background: var(--panel-alt);
+    color: var(--text);
 }
 
 .menu-item.active {
-    background: rgba(99, 102, 241, 0.15); /* Primary color low opacity */
+    background: var(--brand-muted, rgba(99, 102, 241, 0.15));
     color: var(--primary-color);
     font-weight: 600;
 }
@@ -387,31 +366,31 @@ onMounted(() => {
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background-color: var(--text-sub);
+    background-color: var(--muted);
     margin-right: 10px;
-    opacity: 0.5;
+    opacity: 0.6;
     transition: all 0.2s;
 }
 .child-item:hover .dot, .child-item.active .dot {
-    background-color: var(--secondary-color);
+    background-color: var(--primary-color);
     opacity: 1;
-    box-shadow: 0 0 8px var(--secondary-color);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--primary-color) 50%, transparent);
 }
 
 /* 側邊欄底部 */
 .sidebar-footer {
     padding: 20px;
-    border-top: 1px solid var(--glass-border);
+    border-top: 1px solid var(--border-color);
 }
 .user-card {
     display: flex;
     align-items: center;
-    background: rgba(0,0,0,0.2);
+    background: var(--panel-alt);
     padding: 10px;
     border-radius: 12px;
 }
 .user-avatar {
-    background: var(--secondary-color);
+    background: var(--primary-color);
     margin-right: 12px;
 }
 .user-info {
@@ -421,11 +400,11 @@ onMounted(() => {
 .username {
     font-size: 14px;
     font-weight: 600;
-    color: #fff;
+    color: var(--text);
 }
 .role {
     font-size: 12px;
-    color: var(--text-sub);
+    color: var(--muted);
 }
 
 /* --- 主區域 --- */
@@ -447,9 +426,9 @@ onMounted(() => {
     justify-content: space-between;
     align-items: center;
     padding: 0 32px;
-    /* 讓 Header 懸浮 */
-    background: rgba(15, 23, 42, 0.5); 
-    backdrop-filter: blur(8px);
+    background: var(--navbar-bg);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border-color);
     position: sticky;
     top: 0;
     z-index: 50;
@@ -457,41 +436,54 @@ onMounted(() => {
 
 .page-title {
     font-size: 20px;
-    font-weight: 500;
+    font-weight: 600;
+    color: var(--text);
 }
 
 .header-right {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 12px;
 }
 
-.action-btn {
-    background: transparent;
-    border: none;
-    color: var(--text-sub);
-    cursor: pointer;
-    display: flex;
+/* 頂部按鈕：切換主題、退出 */
+.header-btn {
+    display: inline-flex;
     align-items: center;
     gap: 8px;
-    padding: 8px 12px;
-    border-radius: 8px;
-    transition: all 0.2s;
+    padding: 10px 16px;
+    border-radius: 10px;
     font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 1px solid var(--border-color);
+    background: var(--panel);
+    color: var(--text);
 }
-.action-btn:hover {
-    background: rgba(255,255,255,0.05);
-    color: #fff;
+.header-btn-icon {
+    font-size: 18px;
+}
+.header-btn-text {
+    line-height: 1;
+}
+.theme-btn:hover {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+    background: var(--brand-muted, var(--panel-alt));
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--primary-color) 18%, transparent);
 }
 .logout-btn:hover {
-    background: rgba(239, 68, 68, 0.15); /* Red hint */
-    color: #ef4444;
+    border-color: var(--danger);
+    color: var(--danger);
+    background: color-mix(in srgb, var(--danger) 10%, transparent);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--danger) 18%, transparent);
 }
-
-.divider {
+.header-divider {
     width: 1px;
-    height: 16px;
-    background: var(--glass-border);
+    height: 20px;
+    background: var(--border-color);
+    flex-shrink: 0;
 }
 
 /* --- 內容與 Footer --- */
@@ -511,25 +503,26 @@ onMounted(() => {
     background: transparent;
 }
 .content-area::-webkit-scrollbar-thumb {
-    background-color: rgba(255,255,255,0.2);
+    background-color: var(--border-color);
     border-radius: 20px;
 }
 
 /* 玻璃面板容器 (給 router-view 內的頁面使用) */
 .glass-panel {
-    background: var(--glass-bg);
-    border: 1px solid var(--glass-border);
+    background: var(--panel);
+    border: 1px solid var(--border-color);
     border-radius: 16px;
     padding: 30px;
-    min-height: 100%; /* 撐開高度 */
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    min-height: 100%;
+    box-shadow: var(--shadow-md);
 }
 
 .app-footer {
-    flex-shrink: 0; /* 防止 Footer 被壓縮 */
-    /* ... 其他樣式保持不變 */
-    border-top: 1px solid var(--glass-border); /* 確保邊框顏色正確 */
-    background: rgba(15, 23, 42, 0.8); /* 稍微加深背景色 */
+    flex-shrink: 0;
+    border-top: 1px solid var(--border-color);
+    background: var(--panel);
+    color: var(--muted);
+    font-size: 13px;
 }
 
 /* --- 頁面切換動畫 --- */
