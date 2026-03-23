@@ -143,39 +143,39 @@ onMounted (() => {
     
     <!-- 數據表格顯示 -->
     <div class="table-container">
-         <el-table :data="mrList" border style="width:100%" v-loading="loading">
+         <el-table :data="mrList" border style="width:100%" v-loading="loading" table-layout="auto">
             <!-- <el-table-column type="selection" width="35" align="center" /> -->
-                <el-table-column prop="iid" label="MR流水號" width="90"/>
-                <el-table-column prop="projectName" label="專案名稱" min-width="90" show-overflow-tooltip />
-                <el-table-column prop="title" label="標題" min-width="240" show-overflow-tooltip />
-                <el-table-column prop="authorName" label="作者" width="80"/>
-                <el-table-column prop="mergedBy" label="合併人" width="80"/>
-                <el-table-column prop="state" label="狀態" width="90">
+                <el-table-column prop="iid" label="MR流水號" width="100" align="center"/>
+                <el-table-column prop="projectName" label="專案名稱" min-width="120" show-overflow-tooltip />
+                <el-table-column prop="title" label="標題" min-width="280" show-overflow-tooltip />
+                <el-table-column prop="authorName" label="作者" width="110" show-overflow-tooltip/>
+                <el-table-column prop="mergedBy" label="合併人" width="110" show-overflow-tooltip/>
+                <el-table-column prop="state" label="狀態" width="100" align="center">
                     <template #default="scope">
                         <el-tag :type="scope.row.state === 'merged' ? 'success' : scope.row.state === 'opened' ? 'warning' : 'danger'">
                         {{ scope.row.state }}
                         </el-tag>
                     </template>
                 </el-table-column>
-                <el-table-column label="分支" width="240">
+                <el-table-column label="分支" min-width="260" show-overflow-tooltip>
                     <template #default="r">
                         <b>{{ r.row.sourceBranch }}</b> → <b>{{ r.row.targetBranch }}</b>
                     </template>
                 </el-table-column>
-                <el-table-column prop="versionProd" label="PROD關聯版號" width="90">
+                <el-table-column prop="versionProd" label="PROD關聯版號" width="130" align="center">
                     <template #default="scope">
                         <el-tag :type="scope.row.versionProd != null ? 'success' : (scope.row.state == null ? 'warning' : 'danger')"> {{ scope.row.versionProd || '未關聯' }} </el-tag>
                     </template>
                 </el-table-column>
                 
-                <el-table-column prop="versionDev" label="DEV關聯版號" width="90">
+                <el-table-column prop="versionDev" label="DEV關聯版號" width="130" align="center">
                     <template #default="scope">
                         <el-tag :type="scope.row.versionDev != null ? 'success' : (scope.row.state == null ? 'warning' : 'danger')"> {{ scope.row.versionDev || '未關聯' }} </el-tag>
                     </template>
                 </el-table-column>
 
-                <el-table-column prop="mergedAt" label="合併時間" width="160"/>
-                <el-table-column prop="createdAt" label="建立時間" width="160"/>
+                <el-table-column prop="mergedAt" label="合併時間" width="170" show-overflow-tooltip/>
+                <el-table-column prop="createdAt" label="建立時間" width="170" show-overflow-tooltip/>
                 
         </el-table>
         <br>
@@ -221,8 +221,8 @@ onMounted (() => {
     margin-top: 20px; /* 給頂部按鈕留出空間 */
 
     /* <--- 設定最大寬度，您可以根據需要調整這個值 (例如 1000px, 1400px) */
-    max-width: 1500px; /* 設定您覺得舒適的最大寬度 */
-    width: 95%;       /* 確保在小螢幕下佔滿 */
+    max-width: 100%; /* 讓表格依據可用空間自適應寬度 */
+    width: 95%;      /* 確保在小螢幕下佔滿 */
     margin-left: auto;   /* <--- 讓左邊自動填滿空間 */
     margin-right: auto;  /* <--- 讓右邊自動填滿空間，實現水平居中 */
 }
@@ -278,12 +278,12 @@ onMounted (() => {
 /* 按鈕樣式加強 (如果全局沒生效) */
 /* =============================== */
 
-/* 主按鈕 (新增/編輯) */
+/* 主按鈕 */
 :deep(.el-button--primary) {
-    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-    border: none;
-    box-shadow: 0 2px 6px rgba(99, 102, 241, 0.4);
-    color: white;
+    background: var(--brand) !important;
+    border-color: var(--brand) !important;
+    color: #000 !important;
+    box-shadow: 0 2px 6px color-mix(in srgb, var(--brand) 40%, transparent);
 }
 :deep(.el-button--primary:hover) {
     opacity: 0.9;
@@ -292,9 +292,9 @@ onMounted (() => {
 
 /* 危險按鈕 (刪除) */
 :deep(.el-button--danger) {
-    background: linear-gradient(135deg, #ef4444 0%, #f87171 100%);
-    border: none;
-    box-shadow: 0 2px 6px rgba(239, 68, 68, 0.4);
+    background: var(--danger) !important;
+    border-color: var(--danger) !important;
+    box-shadow: 0 2px 6px color-mix(in srgb, var(--danger) 40%, transparent);
 }
 :deep(.el-button--danger:hover) {
     opacity: 0.9;

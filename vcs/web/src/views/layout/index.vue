@@ -52,6 +52,12 @@ const toggleMenu = (path) => {
     expandedMenus.value[path] = !expandedMenus.value[path];
 };
 
+// 側邊欄展開 / 收合
+const isCollapsed = ref(false);
+const toggleSidebar = () => {
+    isCollapsed.value = !isCollapsed.value;
+};
+
 
 // 密碼修改
 // const changePassword = () => {
@@ -120,10 +126,20 @@ onMounted(() => {
     <div class="bg-glow bg-glow-1"></div>
     <div class="bg-glow bg-glow-2"></div>
 
-    <aside class="sidebar">
+    <aside class="sidebar" :class="{ 'sidebar-collapsed': isCollapsed }">
       <div class="logo-area">
-        <div class="logo-icon">V</div>
-        <h1 class="app-title">Version Control</h1>
+        <div class="logo-main">
+          <div class="logo-icon">V</div>
+          <h1 class="app-title">Version Control</h1>
+        </div>
+        <button
+          class="sidebar-toggle-btn"
+          @click="toggleSidebar"
+          :title="isCollapsed ? '展開側邊欄' : '收合側邊欄'"
+        >
+          <el-icon class="toggle-icon"><Menu /></el-icon>
+          <span class="toggle-text">{{ isCollapsed ? '展開' : '收合' }}</span>
+        </button>
       </div>
 
       <nav class="nav-menu">
@@ -161,8 +177,9 @@ onMounted(() => {
               </div>
             </div>
           </div>
-
         </div>
+        
+
       </nav>
 
       <div class="sidebar-footer">
@@ -187,6 +204,7 @@ onMounted(() => {
                 <el-icon class="header-btn-icon"><Moon v-if="isDark" /><Sunny v-else /></el-icon>
                 <span class="header-btn-text">切換主題</span>
             </button>
+            
           <div class="header-divider"></div>
           <button class="header-btn logout-btn" @click="logout">
             <el-icon class="header-btn-icon"><SwitchButton /></el-icon>
@@ -202,7 +220,7 @@ onMounted(() => {
         </div>
 
       <footer class="app-footer">
-        © 2026 版本控制管理系統
+        © 2026 版本控制管理系統 v2
       </footer>
     </div>
   </div>
@@ -252,12 +270,44 @@ onMounted(() => {
     transition: all var(--transition-speed);
 }
 
+/* 收合狀態：縮小寬度並隱藏文字，只留圖示 */
+.sidebar-collapsed {
+    width: 72px;
+}
+.sidebar-collapsed .logo-area .app-title {
+    display: none;
+}
+.sidebar-collapsed .menu-item .label {
+    display: none;
+}
+.sidebar-collapsed .menu-item {
+    justify-content: center;
+}
+.sidebar-collapsed .menu-item .icon {
+    margin-right: 0;
+}
+.sidebar-collapsed .submenu-list {
+    display: none;
+}
+.sidebar-collapsed .user-info {
+    display: none;
+}
+.sidebar-collapsed .user-card {
+    justify-content: center;
+}
+
 .logo-area {
     height: var(--header-height);
     display: flex;
     align-items: center;
-    padding: 0 24px;
+    justify-content: space-between;
+    padding: 0 16px 0 24px;
     border-bottom: 1px solid var(--border-color);
+}
+
+.logo-main {
+    display: flex;
+    align-items: center;
 }
 
 .logo-icon {
@@ -271,7 +321,7 @@ onMounted(() => {
     font-weight: bold;
     font-size: 18px;
     margin-right: 12px;
-    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    box-shadow: 0 4px 12px color-mix(in srgb, var(--brand) 35%, transparent);
 }
 
 .app-title {
@@ -446,6 +496,36 @@ onMounted(() => {
     gap: 12px;
 }
 
+/* 側邊欄收合按鈕樣式（logo 右側） */
+.sidebar-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border-color);
+    background: var(--panel-alt);
+    color: var(--muted);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.sidebar-toggle-btn:hover {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--primary-color) 30%, transparent);
+}
+.toggle-icon {
+    font-size: 16px;
+}
+.toggle-text {
+    line-height: 1;
+}
+/* 收合狀態：只顯示圖示，文字隱藏，仍保留提示 title */
+.sidebar-collapsed .sidebar-toggle-btn .toggle-text {
+    display: none;
+}
+
 /* 頂部按鈕：切換主題、退出 */
 .header-btn {
     display: inline-flex;
@@ -491,7 +571,11 @@ onMounted(() => {
     flex: 1;            /* 佔滿所有剩餘空間，將 Footer 推到底部 */
     padding: 24px 32px;
     overflow-y: auto; /* 內容區滾動 */
-
+    /* 背景使用與整體一致的深色漸層，讓中間內容區更有層次感 */
+    background:
+        radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--brand) 12%, transparent) 0%, transparent 55%),
+        radial-gradient(circle at 100% 100%, color-mix(in srgb, var(--secondary-color) 14%, transparent) 0%, transparent 55%),
+        var(--bg);
 }
 
 

@@ -124,7 +124,7 @@ filebeat.inputs:
   fields_under_root: true
 
 
-# ================= 撥放器 player_struts2_info ==================
+# ================= (舊)撥放器 player_struts2_info ==================
 - type: log
   enabled: true
   id: player_struts2_info
@@ -146,7 +146,7 @@ filebeat.inputs:
     env: production
   fields_under_root: true
 
-# ================= 撥放器 player_access_log ==================
+# ================= (舊)撥放器 player_access_log ==================
 - type: log
   enabled: true
   id: player_access_log
@@ -162,10 +162,10 @@ filebeat.inputs:
   fields_under_root: true
 
 
-# ================= 撥放器 player_api_Spring Boot ==================
+# ================= (新)撥放器 正式 player_api_Spring Boot ==================
 - type: log
   enabled: true
-  id: player_springboot_api
+  id: player_api_main
 
   multiline.type: pattern
   multiline.pattern: '^\d{4}-\d{2}-\d{2}'
@@ -176,9 +176,26 @@ filebeat.inputs:
     - /data/logs/player_api/logs/player_api.*.log
   exclude_files: ['\.gz$']
   fields:
-    log_type: spring_boot
-    project: player_api
-    env: production
+    log_type: player_spring_boot
+    env: player_api
+  fields_under_root: true
+
+# ================= (新)撥放器 備份 player_api_Spring Boot ==================
+- type: log
+  enabled: true
+  id: player_api_main_backup
+
+  multiline.type: pattern
+  multiline.pattern: '^\d{4}-\d{2}-\d{2}'
+  multiline.negate: true
+  multiline.match: after
+
+  paths:
+    - /data/logs/player_api_backup/logs/player_api.*.log
+  exclude_files: ['\.gz$']
+  fields:
+    log_type: player_spring_boot
+    env: player_api_backup
   fields_under_root: true
 
 

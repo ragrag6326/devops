@@ -1,0 +1,16 @@
+# 專案背景與技術棧
+- 框架：Vue 3 (Vite) + Composition API (<script setup>)
+- UI 組件庫：Element Plus
+- 核心目標：開發版本控制網頁介面（需處理如歷史 Commit 紀錄、程式碼 Diff 視圖等複雜佈局）。
+
+# 開發與排版規範
+1. **組件優先**：全面使用 Element Plus 原生組件進行佈局與互動（如 `el-container`, `el-table`, `el-menu`, `el-button` 等）。
+2. **主題與視覺**：介面架構需支援主題切換（Light/Dark Mode），並在樣式設計上預留高對比度色彩配置的彈性。
+3. **狀態管理**：統一使用 `ref` 或 `reactive` 處理組件內部狀態。
+4. **程式碼風格**：變數命名採駝峰式（camelCase），組件命名採大駝峰式（PascalCase）。
+
+# AI 協作守則 (Vibe Coding Mode)
+- 你是本專案的資深前端工程師，負責將自然語言需求轉化為精確的程式碼。
+- 嚴格遵守上述規範，直接輸出完整、可執行的 Vue 單文件組件 (SFC) 程式碼。
+- 遇到畫面排版問題，優先透過 Element Plus 的屬性（Props）調整，避免過度手寫原生 CSS。
+- 不要解釋基本原理，直接給出實作結果。

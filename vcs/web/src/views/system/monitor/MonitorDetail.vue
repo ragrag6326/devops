@@ -428,13 +428,13 @@ onActivated(loadData)
 <style scoped>
 .detail-container { display: flex; flex-direction: column; gap: 20px; }
 .nav-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
-.project-title-tag { background: rgba(99, 102, 241, 0.1); padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(99, 102, 241, 0.2); }
-.project-title-tag span { font-weight: bold; color: var(--primary-color); }
+.project-title-tag { background: var(--brand-muted); padding: 8px 16px; border-radius: 8px; border: 1px solid color-mix(in srgb, var(--brand) 35%, transparent); }
+.project-title-tag span { font-weight: bold; color: var(--brand); }
 
-.glass-panel { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 20px; padding: 24px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2); }
+.glass-panel { background: var(--panel); border: 1px solid var(--border-color); border-radius: 20px; padding: 24px; box-shadow: var(--shadow-md); }
 
 /* 狀態盒與健康度 */
-.status-box h3, .traffic-box .box-title { font-size: 14px; color: var(--text-sub); margin-bottom: 20px; display: flex; align-items: center; }
+.status-box h3, .traffic-box .box-title { font-size: 14px; color: var(--muted); margin-bottom: 20px; display: flex; align-items: center; }
 .health-indicator { display: flex; align-items: center; gap: 20px; }
 .pulse-circle { width: 40px; height: 40px; border-radius: 50%; transition: all 0.3s; }
 .pulse-circle.safe { background: #4ade80; box-shadow: 0 0 20px rgba(74, 222, 128, 0.4); animation: breathe 2s infinite; }
@@ -447,22 +447,22 @@ onActivated(loadData)
 .active-env.green { color: #4ade80; }
 
 .traffic-box .dot { width: 8px; height: 8px; border-radius: 50%; margin-right: 10px; }
-.dot.live { background: #6366f1; box-shadow: 0 0 8px #6366f1; }
+.dot.live { background: var(--brand); box-shadow: 0 0 8px var(--brand); }
 .dot.header { background: #fbbf24; box-shadow: 0 0 8px #fbbf24; }
 
 /* 控制台 */
 .console-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
 .console-header .left { display: flex; align-items: center; gap: 10px; font-weight: 600; }
 .switch-layout { display: flex; align-items: center; gap: 40px; }
-.vs-icon { font-size: 24px; font-weight: 900; color: rgba(255,255,255,0.1); font-style: italic; }
+.vs-icon { font-size: 24px; font-weight: 900; color: var(--border-color); font-style: italic; }
 
 /* 切換模式顯示優化 */
 .right-mode {
     display: flex; align-items: center;
-    background: rgba(0, 0, 0, 0.3); padding: 6px 10px;
-    border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--panel-alt); padding: 6px 10px;
+    border-radius: 8px; border: 1px solid var(--border-color);
 }
-.mode-label { margin-right: 12px; font-weight: 600; color: #cbd5e1; }
+.mode-label { margin-right: 12px; font-weight: 600; color: var(--muted); }
 
 /* 1. 所有 el-radio-button 按鈕的【未選中 / 預設】狀態 */
 :deep(.el-radio-button__inner) {
@@ -476,12 +476,12 @@ onActivated(loadData)
     box-shadow: none !important;              /* 移除預設陰影 */
 }
 
-/* 選中：正式分流 (藍色系) */
+/* 選中：正式分流（品牌色）*/
 :deep(.el-radio-button__original-radio[value=""]:checked + .el-radio-button__inner) {
-    background: rgba(99, 102, 241, 0.2) !important;
-    color: #818cf8 !important;
-    border: 1px solid #6366f1 !important;
-    box-shadow: 0 0 10px rgba(99, 102, 241, 0.3) !important;
+    background: var(--brand-muted) !important;
+    color: var(--brand) !important;
+    border: 1px solid var(--brand) !important;
+    box-shadow: 0 0 10px var(--brand-muted) !important;
 }
 
 /* 選中：Header 測試 (黃色系) */
@@ -502,19 +502,19 @@ onActivated(loadData)
 }
 
 /* 卡片與標籤 */
-.env-card { 
-    flex: 1; text-align: center; padding: 30px; border-radius: 20px; 
-    background: rgba(0,0,0,0.15); border: 1px solid transparent; 
+.env-card {
+    flex: 1; text-align: center; padding: 30px; border-radius: 20px;
+    background: var(--panel-alt); border: 1px solid var(--border-color);
     transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); position: relative;
 }
-.env-card.active { 
-    background: rgba(99, 102, 241, 0.08); 
-    border-color: rgba(99, 102, 241, 0.4);
-    box-shadow: 0 0 25px rgba(99, 102, 241, 0.1);
+.env-card.active {
+    background: var(--brand-muted);
+    border-color: color-mix(in srgb, var(--brand) 50%, transparent);
+    box-shadow: 0 0 25px var(--brand-muted);
 }
 
 .card-title-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-.card-title { font-size: 18px; font-weight: bold; }
+.card-title { font-size: 18px; font-weight: bold; color: var(--text); }
 
 /* 操作按鈕 */
 .icon-btn { background: rgba(255,255,255,0.1); border: none; color: #fff; margin-left: 8px; }

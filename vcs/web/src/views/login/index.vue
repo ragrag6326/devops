@@ -105,7 +105,7 @@ const handleClear = () => {
             </el-form>
 
             <div class="login-footer">
-                © 2026 版本控制管理系統 - 🤖 版權所有
+                © 2026 版本控制管理系統 V2 - 🤖 版權所有
             </div>
         </div>
     </body>
@@ -209,8 +209,8 @@ body::before {
 
 /* 3. 輸入框聚焦 (Focus) 時的樣式 */
 :deep(.el-input__wrapper.is-focus) {
-    box-shadow: 0 0 0 2px var(--primary-color, #6366f1) inset, 
-                0 0 15px rgba(8, 11, 228, 0.4) !important; 
+    box-shadow: 0 0 0 2px var(--brand, #00f5d4) inset,
+                0 0 15px color-mix(in srgb, var(--brand, #00f5d4) 30%, transparent) !important;
 }
 
 /* 4. 調整輸入框內的文字和圖標顏色 */
@@ -229,15 +229,16 @@ body::before {
 
 /* 6. 按鈕樣式 (使用前一輪定義的漸層風格) */
 
-/* 登入按鈕 (Primary - 漸層發光) */
+/* 登入按鈕 (Primary) */
 :deep(.el-button--primary) {
-    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%) !important;
+    background: var(--brand, #00f5d4) !important;
     border: none !important;
-    box-shadow: 0 4px 14px 0 rgba(99, 102, 241, 0.39) !important;
+    color: #000 !important;
+    box-shadow: 0 4px 14px 0 color-mix(in srgb, var(--brand, #00f5d4) 40%, transparent) !important;
     font-weight: 600;
-    height: 48px; 
+    height: 48px;
 }
-:deep(.el-button--primary:hover) { transform: translateY(4px); opacity: 0.8; }
+:deep(.el-button--primary:hover) { transform: translateY(-2px); opacity: 0.9; }
 
 
 /* 清除按鈕 (Info - 玻璃風格) */

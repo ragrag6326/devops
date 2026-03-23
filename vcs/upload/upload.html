@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>極限對比檔案部署系統</title>
+    <title>圖片上傳系統</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
@@ -85,7 +85,7 @@
         <header class="mb-10 text-center md:text-left flex flex-col md:flex-row md:items-end justify-between gap-4">
             <div>
                 <h1 class="text-5xl font-black italic tracking-tighter text-white uppercase">
-                    圖片 <span class="text-[var(--neon-yellow)]">上傳</span>
+                    正式環境 <span class="text-[var(--neon-yellow)]">圖片上傳</span>
                 </h1>
                 <p class="text-[var(--neon-cyan)] font-bold mono mt-2 neon-text-cyan">
                     > 圖片檔案上傳
@@ -110,8 +110,8 @@
                         <span class="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--neon-cyan)] mono font-bold">$</span>
                         <input type="text" id="targetPath" 
                                class="w-full bg-black border-2 border-zinc-700 rounded-xl py-4 pl-10 pr-4 text-white mono focus:outline-none focus:border-[var(--neon-cyan)] transition-colors"
-                               placeholder="/var/www/html/assets/uploads/"
-                               value="/tmp/deploy/">
+                               placeholder="預設目錄 /opt/docker/upload/upload/pending/"
+                               value="/opt/docker/upload/upload/pending/">
                     </div>
                 </section>
 
@@ -279,45 +279,60 @@
             }
         }
 
-        // 上傳與執行 Shell 的模擬
+        // 上傳與執行 Shell 
         uploadBtn.addEventListener('click', async () => {
-            const dest = targetPath.value.trim();
-            if (!dest) {
-                alert("請指定目標路徑");
-                return;
-            }
 
             uploadBtn.disabled = true;
             progressContainer.classList.remove('hidden');
             resultSection.classList.add('hidden');
-            
+
+            // 1. 獲取前端輸入的路徑
+            const destPath = document.getElementById('targetPath').value.trim();
+
+            if (!destPath) {
+                alert("請輸入目標路徑");
+                return;
+            }
+
             const formData = new FormData();
-            selectedFiles.forEach(file => formData.append('files', file));
-            formData.append('destination', dest);
+            // 2. 將路徑放入 formData (Key 名稱要與後端對應)
+            formData.append('destination', destPath);
+            
+            selectedFiles.forEach(file => {
+                formData.append('files', file);
+            });
 
             try {
-                // 這裡模擬 API 上傳過程
-                for (let i = 0; i <= 100; i += 10) {
-                    progressBar.style.width = i + '%';
-                    progressPercent.textContent = i + '%';
-                    await new Promise(r => setTimeout(r, 150));
+                // 設定進度條動畫
+                progressBar.style.width = '30%';
+                progressPercent.textContent = '30%';
+
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    progressBar.style.width = '100%';
+                    progressPercent.textContent = '100%';
+                    
+                    // 顯示上傳成功的新檔名
+                    //const successNames = data.files.map(f => f.name);
+                    displayResults(data.files);
+                    
+                    // 清空檔案
+                    selectedFiles = [];
+                    updateUI();
+                    alert('檔案已成功透過 SCP 部署至目標路徑！');
+                } else {
+                    throw new Error('上傳失敗');
                 }
-
-                // 假設後端 API 回傳成功的資料格式：
-                // { success: true, urls: ["http://domain.com/path/file.jpg", ...] }
-                const mockResponse = {
-                    success: true,
-                    urls: selectedFiles.map(f => `https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&q=80&w=1000&id=${Math.random()}`)
-                };
-
-                displayResults(mockResponse.urls, selectedFiles);
-                
-                // 清空已選檔案
-                selectedFiles = [];
-                updateUI();
                 
             } catch (error) {
                 console.error("上傳失敗", error);
+                alert("上傳失敗，請檢查後端連線或 SSH 權限");
             } finally {
                 uploadBtn.disabled = false;
                 setTimeout(() => {
@@ -327,27 +342,87 @@
             }
         });
 
-        function displayResults(urls, files) {
+        function displayResults(uploadedFiles) {
             resultSection.classList.remove('hidden');
-            urlList.innerHTML = urls.map((url, i) => `
-                <div class="flex flex-col md:flex-row items-center gap-4 bg-zinc-900 p-4 rounded-2xl border-2 border-[var(--neon-cyan)]">
-                    <div class="flex-1 mono text-xs text-white break-all bg-black p-3 rounded border border-zinc-800">
-                        ${url}
+            urlList.innerHTML = uploadedFiles.map(file => `
+                <div class="flex flex-col md:flex-row items-center gap-4 bg-zinc-900 p-4 rounded-2xl border border-zinc-800 hover:border-[var(--neon-cyan)] transition-all">
+                    <div class="flex-1 w-full overflow-hidden">
+                        <div class="bg-black p-3 rounded-xl border border-zinc-800 flex items-center gap-3">
+
+                            <input type="text" id="url-${file.uploaded}" readonly value="${file.url}" onclick="this.select()"
+                                class="w-full bg-transparent border-none text-[var(--neon-cyan)] mono text-xs focus:outline-none">
+                        </div>
                     </div>
-                    <div class="flex gap-2 w-full md:w-auto">
-                        <button onclick="openInPreview('${url}', '${files[i].name}')" class="flex-1 md:flex-none bg-[var(--neon-cyan)] text-black px-4 py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-2 hover:bg-white transition-colors">
+                    
+                    <div class="flex flex-wrap items-center gap-2 shrink-0">
+                        <button onclick="copyToClipboard('${file.url}', this)" 
+                                class="bg-[var(--neon-yellow)] text-black px-4 py-2 rounded-xl text-xs font-black uppercase flex items-center gap-2 hover:bg-white transition-colors">
+                            <i data-lucide="copy" class="w-4 h-4"></i> 複製連結
+                        </button>
+                        
+                        <button onclick="openInPreview('${file.url}', '${file.uploaded}')" 
+                                class="bg-[var(--neon-cyan)] text-black px-4 py-2 rounded-xl text-xs font-black uppercase flex items-center gap-2 hover:bg-white transition-colors">
                             <i data-lucide="eye" class="w-4 h-4"></i> 即時預覽
                         </button>
-                        <a href="${url}" target="_blank" class="flex-1 md:flex-none bg-zinc-800 text-white px-4 py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-2 hover:bg-zinc-700 transition-colors">
-                            <i data-lucide="external-link" class="w-4 h-4"></i> 新分頁開啟
-                        </a>
+
+                        <button onclick="window.open('${file.url}', '_blank')" 
+                                class="bg-zinc-800 text-white px-4 py-2 rounded-xl text-xs font-bold uppercase flex items-center gap-2 hover:bg-zinc-700 transition-colors">
+                            <i data-lucide="external-link" class="w-4 h-4"></i> 開啟
+                        </button>
                     </div>
                 </div>
             `).join('');
-            lucide.createIcons();
             
-            // 自動捲動到結果區
+            lucide.createIcons();
             resultSection.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // 輔助函式：執行複製動作
+        async function copyToClipboard(text, btn) {
+            try {
+                // 優先嘗試現代 API
+                if (navigator.clipboard && window.isSecureContext) {
+                    await navigator.clipboard.writeText(text);
+                } else {
+                    // 備用方案：建立一個隱藏的 textarea 進行複製
+                    const textArea = document.createElement("textarea");
+                    textArea.value = text;
+                    // 確保 textarea 不會影響頁面佈局且不可見
+                    textArea.style.position = "fixed";
+                    textArea.style.left = "-9999px";
+                    textArea.style.top = "0";
+                    document.body.appendChild(textArea);
+                    textArea.focus();
+                    textArea.select();
+                    
+                    const successful = document.execCommand('copy');
+                    document.body.removeChild(textArea);
+                    
+                    if (!successful) throw new Error('傳統複製指令失敗');
+                }
+                
+                // --- 視覺回饋效果 ---
+                const originalHTML = btn.innerHTML;
+                const originalBg = btn.style.backgroundColor; // 紀錄原始背景（若有）
+                
+                btn.innerHTML = `<i data-lucide="check" class="w-4 h-4"></i> 已複製`;
+                // 使用 Tailwind class 切換或直接改 style
+                const oldClass = 'bg-[var(--neon-yellow)]';
+                const newClass = 'bg-green-500';
+                
+                btn.classList.replace(oldClass, newClass);
+                lucide.createIcons();
+
+                setTimeout(() => {
+                    btn.innerHTML = originalHTML;
+                    btn.classList.replace(newClass, oldClass);
+                    lucide.createIcons();
+                }, 2000);
+
+            } catch (err) {
+                console.error('複製失敗:', err);
+                alert('複製失敗，請手動選取輸入框文字進行複製');
+            }
         }
 
         // 預覽功能

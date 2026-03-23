@@ -22,12 +22,10 @@ export const toggleTheme = (isDark) => {
 
 export const initTheme = () => {
   const savedTheme = localStorage.getItem('theme');
-  // 檢查系統偏好
-  const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  
-  if (savedTheme === 'dark' || (!savedTheme && systemPrefersDark)) {
-    toggleTheme(true);
-  } else {
+  // 預設深色模式，除非使用者曾明確切換至淺色
+  if (savedTheme === 'light') {
     toggleTheme(false);
+  } else {
+    toggleTheme(true);
   }
 };

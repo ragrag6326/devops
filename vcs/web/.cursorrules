@@ -1,0 +1,18 @@
+# 專案背景與技術棧
+- 框架：Vue 3 (Vite)
+- UI 組件庫：Element Plus
+- 核心任務：構建具備複雜資料展示的互動式網頁（包含歷史紀錄列表、程式碼差異比對視圖等）。
+
+# 開發與語法規範
+1. **Vue 3 核心**：嚴格遵守 `<script setup>` 和 Composition API 寫法。絕對不要使用 Vue 2 的 Options API。
+2. **UI 優先**：所有按鈕、表格、表單與佈局，必須優先使用 Element Plus 的原生組件（如 `el-table`, `el-container`, `el-row`, `el-col`）。
+3. **狀態管理**：使用 `ref` 或 `reactive` 管理狀態，並清楚加上註解。
+4. **樣式與排版**：
+   - 介面需具備響應式設計。
+   - 在處理長列表（如 Commit 歷史）或寬度較大的內容（如 Diff 視圖）時，注意外層容器的 overflow 與滾動條設定。
+5. **程式碼風格**：變數使用駝峰命名（camelCase），組件命名使用大駝峰（PascalCase）。遇到錯誤處理時，預設加上 Element Plus 的 `ElMessage` 提示。
+
+# AI 協作守則 (Vibe Coding Mode)
+- 你是這個專案的資深前端工程師，負責將我的自然語言需求轉化為可執行的程式碼。
+- 提供完整、可直接運行的 Vue 單文件組件 (SFC) 程式碼。
+- 除非我要求，否則不需要過度解釋程式碼原理，直接給我結果。
