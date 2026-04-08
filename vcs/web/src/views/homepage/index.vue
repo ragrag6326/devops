@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 // 引入需要的圖標
 import { 
   Promotion, Check, CircleClose, FolderOpened, 
@@ -22,6 +22,91 @@ const recentActivities = ref([
   { time: '昨天 15:30', description: '專案 B 版本更新至 2.1.0。', type: 'primary' },
   { time: '2 天前', description: '專案 C 部署至 Staging 環境失敗，請檢查。', type: 'danger' }
 ]);
+
+// ------------------------------
+// 歡迎卡片右側：assets 圖片隨機輪播/刷新隨機
+// ------------------------------
+// 註：此實作會抓取 `src/assets` 底下符合 `bg*.png` 的檔案。
+const enableBgCarousel = true; // 若只要刷新隨機一張，改成 false
+const carouselIntervalMs = 4500;
+
+// 每張圖片底下的說明文字：用「檔名」對應
+// 你之後只要新增圖片檔案並補上對應說明即可
+const bgCaptionsByFile = {
+  'kp.png': '我是不會投降的。',
+  '昌.png': '太離譜了，實在太離譜了',
+  'liar.png': '不是喔! 不是這樣喔。',
+  'koreafish.png': '我跟你談大海，你跟談我漱口杯',
+};
+
+const bgImageModules = import.meta.glob('../../assets/*.png', {
+  eager: true,
+  import: 'default',
+});
+
+const bgSlides = Object.entries(bgImageModules)
+  .map(([filePath, src]) => {
+    const filename = filePath.split('/').pop() || filePath;
+    const caption = bgCaptionsByFile[filename] || `（${filename}）圖片說明待補上`;
+    return { id: filename, src, filename, caption };
+  })
+  .sort((a, b) => a.filename.localeCompare(b.filename));
+
+const slideOrder = ref([]);
+const slidePointer = ref(0);
+const isBgPaused = ref(false);
+const bgTimeoutId = ref(null);
+
+const shuffleInPlace = (arr) => {
+  // Fisher-Yates shuffle
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+};
+
+const clearBgTimer = () => {
+  if (bgTimeoutId.value) {
+    window.clearTimeout(bgTimeoutId.value);
+    bgTimeoutId.value = null;
+  }
+};
+
+const initBgCarousel = () => {
+  if (!bgSlides.length) return;
+  slideOrder.value = bgSlides.map((_, i) => i);
+  shuffleInPlace(slideOrder.value);
+  slidePointer.value = 0;
+};
+
+const currentBgSlide = computed(() => {
+  if (!bgSlides.length) return { id: '', src: '', filename: '', caption: '' };
+  const idx = slideOrder.value[slidePointer.value];
+  return bgSlides[idx ?? 0] ?? bgSlides[0];
+});
+
+const scheduleNextBg = () => {
+  clearBgTimer();
+  if (isBgPaused.value) return;
+  if (!enableBgCarousel) return;
+  if (bgSlides.length <= 1) return;
+
+  bgTimeoutId.value = window.setTimeout(() => {
+    slidePointer.value = (slidePointer.value + 1) % slideOrder.value.length;
+    scheduleNextBg();
+  }, carouselIntervalMs);
+};
+
+const pauseBgCarousel = () => {
+  isBgPaused.value = true;
+  clearBgTimer();
+};
+
+const resumeBgCarousel = () => {
+  isBgPaused.value = false;
+  scheduleNextBg();
+};
 
 
 // --- 2. 新增：Release Note 相關邏輯 ---
@@ -139,8 +224,16 @@ const refreshData = async () => {
 
 onMounted(() => {
   console.log('Homepage Dashboard loaded.');
+
+  initBgCarousel();
+  scheduleNextBg();
+
   fetchReleaseNotes(); // 載入時觸發
   fetchPendingMRs(); // 初始載入
+});
+
+onUnmounted(() => {
+  clearBgTimer();
 });
 </script>
 
@@ -160,9 +253,34 @@ onMounted(() => {
           </div>
         </div>
         <div class="image-area">
-           <img src="@/assets/bg.png" alt="Dashboard Illustration" class="dashboard-img">
+          <div
+            class="bg-carousel"
+            @mouseenter="pauseBgCarousel"
+            @mouseleave="resumeBgCarousel"
+          >
+            <transition name="carousel-fade" mode="out-in">
+              <img
+                v-if="currentBgSlide.src"
+                :key="currentBgSlide.id"
+                class="carousel-img"
+                :src="currentBgSlide.src"
+                :alt="currentBgSlide.filename || 'carousel image'"
+              />
+            </transition>
+
+            <div class="carousel-dots" aria-hidden="true" v-if="slideOrder.length > 1">
+              <span
+                v-for="(slideIdx, i) in slideOrder"
+                :key="bgSlides[slideIdx]?.id || i"
+                class="dot"
+                :class="{ active: i === slidePointer }"
+              />
+            </div>
+          </div>
+          <p class="bg-caption">{{ currentBgSlide.caption }}</p>
         </div>
       </div>
+     
     </el-card>
 
     <el-row :gutter="20" class="stat-row">
@@ -310,6 +428,8 @@ onMounted(() => {
 /* --- 1. 歡迎卡片 --- */
 .welcome-card {
   height: 250px;
+  display: flex;
+  flex-direction: column;
   background: var(--panel);
   border: 1px solid var(--border-color);
   overflow: hidden;
@@ -318,16 +438,90 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  height: 100%;
+  flex: 1;
+  height: auto;
 }
 .text-area { flex: 2; padding-right: 30px; }
-.image-area { flex: 1; display: flex; justify-content: flex-end; align-items: center; }
+.image-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 10px;
+}
 .dashboard-img {
   max-width: 100%;
   height: auto;
   max-height: 200px;
   border-radius: var(--radius);
   opacity: 0.85;
+}
+
+/* --- 背景圖片輪播 --- */
+.bg-carousel {
+  position: relative;
+  width: 240px;
+  height: 150px;
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  background: var(--panel);
+}
+
+.carousel-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.92;
+  transform: scale(1.02);
+}
+
+/* 淡入淡出動畫（切換背景圖） */
+.carousel-fade-enter-active,
+.carousel-fade-leave-active {
+  transition: opacity 0.45s ease, transform 0.45s ease;
+}
+.carousel-fade-enter-from,
+.carousel-fade-leave-to {
+  opacity: 0;
+  transform: scale(1.03);
+}
+.carousel-fade-enter-to,
+.carousel-fade-leave-from {
+  opacity: 1;
+  transform: scale(1.02);
+}
+
+.bg-caption {
+  margin: 0;
+  max-width: 240px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
+  padding: 0 4px;
+}
+
+.carousel-dots {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  gap: 6px;
+}
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+.dot.active {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(255, 255, 255, 0.95);
 }
 .welcome-title { font-size: 28px; margin-top: 0; color: var(--text); }
 .welcome-subtitle { color: var(--muted); line-height: 1.6; max-width: 800px; }

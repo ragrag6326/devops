@@ -67,14 +67,25 @@ export function getAudLogPage(page, pageSize, projectName, status, StartDate, En
   return request.get(`/monitor/list?page=${page}&pageSize=${pageSize}&projectName=${projectName}&status=${status}&StartDate=${StartDate}&EndDate=${EndDate}`);
 }
 
+
 /** 
- * 6.0.5 取得機器上的版本號
+ * 6.0.5.1 取得所有自動部署 (歷史-現在) 版號
+ * @param {string} type 歷史/現在
+  * @returns
+ */
+export function getDockerImageVersion(type) {
+  return request.get(`/monitor/getImageVersion/${type}`);
+}
+
+/** 
+ * 6.0.5.2 取得(前端)機器上的版本號，退版用
  * @param {string} projectName 專案名稱
   * @returns
  */
-export function getImageVersion(projectName) {
-  return request.get(`/monitor/getImageVersion?projectName=${projectName}`);
+export function getRollBackImageVersion(projectName) {
+  return request.get(`/monitor/getRollBackImageVersion?projectName=${projectName}`);
 }
+
 
 /** 
  * 6.0.6 版本號更新
@@ -91,4 +102,13 @@ export function renewimage(params) {
       timeout: 10000 //  設定 10 秒超時
     }
   );
+}
+
+/** 
+ * 6.0.7 移除機器上的版本號
+ * @param {string} imageName 映像名稱
+  * @returns
+ */
+export function deleteImage(imageName) {
+  return request.get(`/monitor/deleteImage?imageName=${imageName}`);
 }

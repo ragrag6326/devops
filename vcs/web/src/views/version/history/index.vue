@@ -5,7 +5,196 @@ import { AnsiUp } from 'ansi_up';
 import { queryVersionPage , queryVersionById , deleteVersionById  , edit , getLatestSuccessVersion , getNextVersion , checkDeployable , updateJenkinsBuildId} from "@/api/version";
 import { triggerJenkinsBuild , getJenkinsConsoleLog , getJenkinsPiplineNumber } from "@/api/jenkins";
 import { deploying } from "@/api/deploy";
-import { getImageVersion , renewimage } from "@/api/monitor";
+import { getDockerImageVersion , getRollBackImageVersion , renewimage , deleteImage } from "@/api/monitor";
+
+// ===== 字串解析共用工具 =====
+const KNOWN_NODE_TYPES = ['backup', 'prod', 'dev', 'local'];
+
+const parseVersionString = (str) => {
+    const colonIdx = str.lastIndexOf(':');
+    if (colonIdx === -1) return { projectName: str, nodeType: null, version: '未知', raw: str, fullString: str };
+    const identifier = str.slice(0, colonIdx);
+    const version    = str.slice(colonIdx + 1);
+    let projectName  = identifier;
+    let nodeType     = null;
+    for (const nt of KNOWN_NODE_TYPES) {
+        if (identifier.endsWith('-' + nt)) {
+            projectName = identifier.slice(0, -(nt.length + 1));
+            nodeType    = nt;
+            break;
+        }
+    }
+    return { projectName, nodeType, version, raw: identifier, fullString: str };
+};
+
+// ===== 目前機器版本 (current) =====
+const liveVersions    = ref([]);   // [{ projectName, nodeType, version, raw, fullString }]
+const currentVersionSet = ref(new Set()); // 原始字串 Set，供移除時保護用
+const liveVersionsLoading = ref(false);
+
+const NODE_ORDER = { prod: 0, backup: 1, dev: 2, local: 3 };
+
+const groupedLiveVersions = computed(() => {
+    const map = {};
+    liveVersions.value.forEach(({ projectName, nodeType, version, raw }) => {
+        if (!map[projectName]) map[projectName] = { projectName, nodes: [] };
+        map[projectName].nodes.push({ nodeType, version, raw });
+    });
+    return Object.values(map).map(g => ({
+        ...g,
+        nodes: g.nodes.slice().sort((a, b) =>
+            (NODE_ORDER[a.nodeType] ?? 9) - (NODE_ORDER[b.nodeType] ?? 9)
+        )
+    }));
+});
+
+const fetchLiveVersions = async () => {
+    liveVersionsLoading.value = true;
+    try {
+        const res = await getDockerImageVersion('current');
+        if (res.code === 1 && Array.isArray(res.data)) {
+            liveVersions.value    = res.data.map(parseVersionString);
+            currentVersionSet.value = new Set(res.data);  // 保留原始字串做保護集合
+        } else {
+            ElMessage.warning(res.msg || '取得版本資訊失敗');
+        }
+    } catch {
+        ElMessage.error('無法連線後端，請確認伺服器狀態');
+    } finally {
+        liveVersionsLoading.value = false;
+    }
+};
+
+// ===== 移除 Image =====
+const FRONTEND_PROJECTS = ['go_nuxt'];
+const BACKEND_PROJECTS  = ['tkbgoapi', 'tkbtv', 'form-service'];
+
+const removeDialogVisible  = ref(false);
+const removeCategory       = ref('');          // 'frontend' | 'backend'
+const historyVersionsRaw   = ref([]);          // 歷史版本原始字串陣列
+const fetchHistoryLoading  = ref(false);
+const selectedImages       = ref([]);          // 勾選要刪除的 fullString[]
+const removeLoading        = ref(false);
+
+/** 過濾後的歷史版本清單（含 isCurrent 旗標） */
+const filteredHistoryVersions = computed(() => {
+    if (!removeCategory.value || historyVersionsRaw.value.length === 0) return [];
+    const allowed = new Set(
+        removeCategory.value === 'frontend' ? FRONTEND_PROJECTS : BACKEND_PROJECTS
+    );
+    return historyVersionsRaw.value
+        .map(str => ({ ...parseVersionString(str), isCurrent: currentVersionSet.value.has(str) }))
+        .filter(item => allowed.has(item.projectName))
+        .sort((a, b) => {
+            if (a.projectName !== b.projectName) return a.projectName.localeCompare(b.projectName);
+            return (NODE_ORDER[a.nodeType] ?? 9) - (NODE_ORDER[b.nodeType] ?? 9);
+        });
+});
+
+const openRemoveDialog = () => {
+    removeDialogVisible.value = true;
+    removeCategory.value      = '';
+    historyVersionsRaw.value  = [];
+    selectedImages.value      = [];
+};
+
+/** 切換分類 → 重拉歷史清單 */
+watch(removeCategory, async (val) => {
+    if (!val) return;
+    selectedImages.value     = [];
+    historyVersionsRaw.value = [];
+    fetchHistoryLoading.value = true;
+    try {
+        const res = await getDockerImageVersion('history');
+        if (res.code === 1 && Array.isArray(res.data)) {
+            historyVersionsRaw.value = res.data;
+        } else {
+            ElMessage.warning(res.msg || '取得歷史版本失敗');
+        }
+    } catch {
+        ElMessage.error('取得歷史版本時發生錯誤');
+    } finally {
+        fetchHistoryLoading.value = false;
+    }
+});
+
+/**
+ * 依分類組出後端所需的完整 imageName
+ * 格式：backend-prod/tkbgoapi:1.0.39 或 frontend-prod/go_nuxt-backup:1.0.47
+ */
+const buildImageName = (fullString) => {
+    const prefix = removeCategory.value === 'frontend' ? 'frontend-prod' : 'backend-prod';
+    return `${prefix}/${fullString}`;
+};
+
+/**
+ * 判斷後端回傳結果是否真正成功
+ * 後端永遠回傳 code:1 / msg:"success"，實際結果藏在 data 字串
+ * data === "刪除成功" → 成功；其他皆視為失敗
+ */
+const isDeleteSuccess = (res) => {
+    return res?.data === '刪除成功';
+};
+
+/** 確認移除 */
+const handleConfirmRemove = async () => {
+    if (selectedImages.value.length === 0) {
+        ElMessage.warning('請至少勾選一個版號');
+        return;
+    }
+
+    try {
+        await ElMessageBox.confirm(
+            `確定要永久移除 ${selectedImages.value.length} 個 Image？此操作不可逆，請謹慎確認。`,
+            '確認移除 Image',
+            { type: 'warning', confirmButtonText: '確認移除', cancelButtonText: '取消' }
+        );
+    } catch {
+        return;
+    }
+
+    removeLoading.value = true;
+    let ok = 0;
+    const failedList = [];  // 記錄失敗的 imageName，方便使用者核對
+
+    for (const fullString of selectedImages.value) {
+        const imageName = buildImageName(fullString);
+        try {
+            const res = await deleteImage(imageName);
+            if (isDeleteSuccess(res)) {
+                ok++;
+            } else {
+                // res.data 回傳的是後端說明文字（例如 "刪除失敗"）
+                failedList.push({ name: fullString, reason: res?.data || '未知錯誤' });
+            }
+        } catch (err) {
+            failedList.push({ name: fullString, reason: '網路或伺服器錯誤' });
+        }
+    }
+
+    removeLoading.value = false;
+
+    if (ok > 0) {
+        ElMessage.success(`成功移除 ${ok} 個 Image`);
+    }
+
+    if (failedList.length > 0) {
+        // 逐條顯示失敗資訊
+        failedList.forEach(({ name, reason }) => {
+            ElMessage.error({ message: `移除失敗：${name}（${reason}）`, duration: 5000 });
+        });
+        // 重拉歷史清單並清除勾選，讓使用者重新確認
+        const res = await getDockerImageVersion('history').catch(() => null);
+        if (res?.code === 1 && Array.isArray(res.data)) {
+            historyVersionsRaw.value = res.data;
+        }
+        selectedImages.value = [];
+    } else {
+        // 全部成功：關閉對話框並刷新版本面板
+        removeDialogVisible.value = false;
+        fetchLiveVersions();
+    }
+};
 
 import { ElMessage , ElMessageBox , ElLoading, sliderContextKey } from 'element-plus'
 import axios from 'axios';
@@ -85,7 +274,7 @@ watch(() => rollbackForm.value.projectName, async (newVal) => {
 
     try {
         // 發送 PATCH 請求
-        const res = await getImageVersion(newVal);
+        const res = await getRollBackImageVersion(newVal);
         
         if (res.code === 1) {
             rollbackData.value = res.data; // 將回傳的陣列存入
@@ -1011,14 +1200,107 @@ const getToken = () => {
 
 onMounted (() => {
     search();
-    getToken();  // 獲取 token
+    getToken();
+    fetchLiveVersions();
 })
 
 
 </script>
 
 <template>
-    <h1>版本歷史紀錄查詢</h1>
+  <!-- ===== 頁面頭部 ===== -->
+  <div class="page-header">
+    <div class="page-header-left">
+      <h1 class="page-title-main">版本歷史紀錄</h1>
+      <p class="page-subtitle">管理專案部署版號，追蹤各環境上線狀態</p>
+    </div>
+    <button class="refresh-live-btn" @click="fetchLiveVersions" :disabled="liveVersionsLoading" title="重新整理線上版本">
+      <svg :class="{ 'spin-icon': liveVersionsLoading }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+      </svg>
+      <span>{{ liveVersionsLoading ? '更新中...' : '更新版本' }}</span>
+    </button>
+  </div>
+
+  <!-- ===== 線上版本狀態板 ===== -->
+  <div class="live-version-board">
+    <div class="lvb-header">
+      <div class="lvb-title-wrap">
+        <span class="live-dot"></span>
+        <span class="lvb-title">目前機器版本</span>
+        <span class="lvb-source">後端容器鏡像</span>
+        <span v-if="!liveVersionsLoading && liveVersions.length > 0" class="lvb-count">
+          共 {{ groupedLiveVersions.length }} 個服務・{{ liveVersions.length }} 個節點
+        </span>
+      </div>
+      <!-- 快速操作按鈕 -->
+      <div class="lvb-actions">
+        <button class="lvb-action-btn rollback-btn" @click="handleOpenRollback" title="版本退版">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="1 4 1 10 7 10"/>
+            <path d="M3.51 15a9 9 0 1 0 .49-3.34"/>
+          </svg>
+          <span>退版</span>
+        </button>
+        <button class="lvb-action-btn remove-btn" @click="openRemoveDialog" title="移除 Image">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"/>
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+            <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+          </svg>
+          <span>移除 Image</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 載入中 -->
+    <div v-if="liveVersionsLoading" class="lvb-loading">
+      <span class="lvb-spinner"></span>
+      <span>正在查詢各服務版本...</span>
+    </div>
+
+    <!-- 無資料 -->
+    <div v-else-if="groupedLiveVersions.length === 0" class="lvb-empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r="0.5" fill="currentColor"/>
+      </svg>
+      <span>暫無版本資料，請點選右上角「更新版本」重新查詢</span>
+    </div>
+
+    <!-- 分組版本卡片 -->
+    <div v-else class="lvb-grid">
+      <div v-for="group in groupedLiveVersions" :key="group.projectName" class="lvb-project-card">
+        <!-- 專案名稱 -->
+        <div class="lvb-proj-name">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+          </svg>
+          <span>{{ group.projectName }}</span>
+        </div>
+        <!-- 節點版本 Chips -->
+        <div class="lvb-nodes">
+          <div v-for="node in group.nodes" :key="node.raw" class="lvb-node-chip"
+               :class="{
+                 'chip-prod':   node.nodeType === 'prod',
+                 'chip-backup': node.nodeType === 'backup',
+                 'chip-dev':    node.nodeType === 'dev',
+                 'chip-local':  node.nodeType === 'local',
+                 'chip-none':   node.nodeType === null
+               }">
+            <span class="chip-node-label">
+              {{ node.nodeType === 'prod'   ? '正式' :
+                 node.nodeType === 'backup' ? '備援' :
+                 node.nodeType === 'dev'    ? '測試' :
+                 node.nodeType === 'local'  ? '地端' : '通用' }}
+            </span>
+            <span class="chip-divider"></span>
+            <code class="chip-version">{{ node.version }}</code>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
     <!-- 搜索欄 -->
     <div id="container">
@@ -1050,11 +1332,7 @@ onMounted (() => {
         </el-form>
 
         <el-button el-button type="primary" @click="InitAddForm">新增版號</el-button>
-        <el-button el-button type="danger" :disabled="multipleSelection.length === 0" @click="handleBatchDelete"> 批量刪除</el-button>
-
-        <el-button type="warning" @click="handleOpenRollback">
-            <el-icon><RefreshLeft /></el-icon> 版本退版 (Rollback)
-        </el-button>
+        <el-button el-button type="danger" :disabled="multipleSelection.length === 0" @click="handleBatchDelete">批量刪除</el-button>
 
     </div>
 
@@ -1313,6 +1591,133 @@ onMounted (() => {
             </div>
             <!-- <pre id="terminal-content" class="terminal-body">{{ logContent }}</pre> -->
         </div>
+    </el-dialog>
+
+    <!-- ===================================================
+         移除 Image 對話框
+         =================================================== -->
+    <el-dialog
+        v-model="removeDialogVisible"
+        title="移除 Image"
+        width="640px"
+        :close-on-click-modal="false"
+        class="remove-image-dialog"
+    >
+        <!-- 步驟提示 -->
+        <div class="ri-steps">
+            <span class="ri-step" :class="{ active: true }">① 選擇類別</span>
+            <span class="ri-step-arrow">›</span>
+            <span class="ri-step" :class="{ active: removeCategory !== '' }">② 選擇版號</span>
+            <span class="ri-step-arrow">›</span>
+            <span class="ri-step" :class="{ active: selectedImages.length > 0 }">③ 確認移除</span>
+        </div>
+
+        <!-- 分類選擇 -->
+        <div class="ri-category-row">
+            <button class="ri-cat-btn" :class="{ selected: removeCategory === 'frontend' }"
+                    @click="removeCategory = 'frontend'">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                    <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
+                </svg>
+                <span>前端</span>
+                <small>{{ FRONTEND_PROJECTS.join(' · ') }}</small>
+            </button>
+            <button class="ri-cat-btn" :class="{ selected: removeCategory === 'backend' }"
+                    @click="removeCategory = 'backend'">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                    <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+                    <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+                    <line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/>
+                </svg>
+                <span>後端</span>
+                <small>{{ BACKEND_PROJECTS.join(' · ') }}</small>
+            </button>
+        </div>
+
+        <!-- 版本清單 -->
+        <div v-if="removeCategory" class="ri-list-wrap">
+            <div class="ri-list-header">
+                <span>歷史版本清單</span>
+                <span v-if="!fetchHistoryLoading" class="ri-sel-count">
+                    已選 {{ selectedImages.length }} / {{ filteredHistoryVersions.filter(v => !v.isCurrent).length }} 個可移除版號
+                </span>
+            </div>
+
+            <!-- 載入中 -->
+            <div v-if="fetchHistoryLoading" class="ri-loading">
+                <span class="ri-spinner"></span>
+                <span>載入歷史版本中...</span>
+            </div>
+
+            <!-- 空 -->
+            <div v-else-if="filteredHistoryVersions.length === 0" class="ri-empty">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                    <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
+                    <circle cx="12" cy="16" r="0.5" fill="currentColor"/>
+                </svg>
+                目前此分類沒有歷史版本
+            </div>
+
+            <!-- 版本列表 -->
+            <div v-else class="ri-list">
+                <label
+                    v-for="item in filteredHistoryVersions"
+                    :key="item.fullString"
+                    class="ri-item"
+                    :class="{ 'is-current': item.isCurrent, 'is-selected': selectedImages.includes(item.fullString) }"
+                >
+                    <input
+                        type="checkbox"
+                        :value="item.fullString"
+                        v-model="selectedImages"
+                        :disabled="item.isCurrent"
+                        class="ri-checkbox"
+                    />
+                    <div class="ri-item-body">
+                        <div class="ri-item-top">
+                            <span class="ri-proj">{{ item.projectName }}</span>
+                            <span v-if="item.nodeType" class="ri-node-tag"
+                                  :class="{
+                                    'rn-prod':   item.nodeType === 'prod',
+                                    'rn-backup': item.nodeType === 'backup',
+                                    'rn-dev':    item.nodeType === 'dev',
+                                    'rn-local':  item.nodeType === 'local'
+                                  }">
+                                {{ item.nodeType === 'prod' ? '正式' : item.nodeType === 'backup' ? '備援' : item.nodeType === 'dev' ? '測試' : '地端' }}
+                            </span>
+                            <span v-if="item.isCurrent" class="ri-in-use-badge">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                                </svg>
+                                使用中，不可移除
+                            </span>
+                        </div>
+                        <code class="ri-ver">{{ item.fullString }}</code>
+                    </div>
+                </label>
+            </div>
+
+            <!-- 警告提示 -->
+            <div v-if="selectedImages.length > 0" class="ri-warning">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                    <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+                已選 <strong>{{ selectedImages.length }}</strong> 個 Image 將被永久刪除，此操作不可逆。
+            </div>
+        </div>
+
+        <template #footer>
+            <el-button @click="removeDialogVisible = false" :disabled="removeLoading">取消</el-button>
+            <el-button
+                type="danger"
+                :loading="removeLoading"
+                :disabled="selectedImages.length === 0"
+                @click="handleConfirmRemove"
+            >
+                確認移除 {{ selectedImages.length > 0 ? `(${selectedImages.length})` : '' }}
+            </el-button>
+        </template>
     </el-dialog>
 
 </template>
@@ -1669,5 +2074,496 @@ onMounted (() => {
 .terminal-body::-webkit-scrollbar-thumb:hover {
     background: #555; 
 }
+
+/* ============================================================
+   頁面頭部
+   ============================================================ */
+.page-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    margin-bottom: 20px;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+.page-title-main {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text);
+    margin: 0 0 4px 0;
+    letter-spacing: -0.02em;
+}
+.page-subtitle {
+    font-size: 13px;
+    color: var(--muted);
+    margin: 0;
+}
+.refresh-live-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 16px;
+    border-radius: 9px;
+    border: 1px solid var(--border-color);
+    background: var(--panel);
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+.refresh-live-btn svg { width: 15px; height: 15px; transition: transform 0.3s; }
+.refresh-live-btn:hover:not(:disabled) {
+    border-color: var(--brand);
+    color: var(--brand);
+    background: var(--brand-muted);
+}
+.refresh-live-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.spin-icon { animation: spin 1s linear infinite; }
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+
+/* ============================================================
+   線上版本狀態板 (Live Version Board)
+   ============================================================ */
+.live-version-board {
+    background: var(--panel);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 16px 20px 20px;
+    margin-bottom: 24px;
+    box-shadow: var(--shadow);
+}
+
+/* Header row */
+.lvb-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.lvb-title-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+.lvb-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+}
+.lvb-source {
+    font-size: 12px;
+    color: var(--muted);
+    padding: 2px 8px;
+    background: var(--panel-alt);
+    border: 1px solid var(--border-color);
+    border-radius: 99px;
+}
+.lvb-count {
+    font-size: 12px;
+    color: var(--muted);
+    margin-left: 4px;
+}
+
+/* 快速操作按鈕組 */
+.lvb-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.lvb-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 13px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--panel-alt);
+    font-size: 13px;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    white-space: nowrap;
+    line-height: 1;
+}
+.lvb-action-btn svg {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+.rollback-btn {
+    color: #d97706;
+    border-color: color-mix(in srgb, #f59e0b 30%, transparent);
+    background: color-mix(in srgb, #f59e0b 8%, transparent);
+}
+.rollback-btn:hover {
+    background: color-mix(in srgb, #f59e0b 14%, transparent);
+    border-color: #f59e0b;
+    box-shadow: 0 2px 8px color-mix(in srgb, #f59e0b 20%, transparent);
+}
+html[data-theme='dark'] .rollback-btn { color: #fbbf24; }
+
+.remove-btn {
+    color: var(--danger);
+    border-color: color-mix(in srgb, var(--danger) 30%, transparent);
+    background: color-mix(in srgb, var(--danger) 8%, transparent);
+}
+.remove-btn:hover {
+    background: color-mix(in srgb, var(--danger) 14%, transparent);
+    border-color: var(--danger);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--danger) 20%, transparent);
+}
+.live-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--success);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 25%, transparent);
+    animation: pulse-glow 2s ease-in-out infinite;
+    flex-shrink: 0;
+}
+@keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 25%, transparent); }
+    50%       { box-shadow: 0 0 0 6px color-mix(in srgb, var(--success) 5%, transparent); }
+}
+
+/* Loading */
+.lvb-loading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--muted);
+    font-size: 13px;
+    padding: 8px 0;
+}
+.lvb-spinner {
+    width: 16px; height: 16px;
+    border: 2px solid var(--border-color);
+    border-top-color: var(--brand);
+    border-radius: 50%;
+    animation: spin 0.75s linear infinite;
+    flex-shrink: 0;
+}
+
+/* Empty */
+.lvb-empty {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--muted);
+    font-size: 13px;
+    padding: 8px 0;
+}
+.lvb-empty svg { width: 18px; height: 18px; flex-shrink: 0; opacity: 0.55; }
+
+/* ---- 分組 Grid ---- */
+.lvb-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+/* 每個專案卡片 */
+.lvb-project-card {
+    background: var(--panel-alt);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 12px 14px;
+    flex: 0 0 auto;
+    min-width: 180px;
+    max-width: 280px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+.lvb-project-card:hover {
+    border-color: var(--brand);
+    box-shadow: 0 0 0 3px var(--brand-muted);
+}
+
+/* 專案名稱 */
+.lvb-proj-name {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.lvb-proj-name svg {
+    width: 14px; height: 14px;
+    color: var(--muted);
+    flex-shrink: 0;
+}
+
+/* 節點 Chips 行 */
+.lvb-nodes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+/* 節點版本 Chip：左邊節點標籤 + 右邊版本號 */
+.lvb-node-chip {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 500;
+    overflow: hidden;
+    border: 1px solid transparent;
+}
+
+.chip-node-label {
+    padding: 4px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+}
+.chip-divider {
+    width: 1px;
+    height: 100%;
+    align-self: stretch;
+    background: currentColor;
+    opacity: 0.2;
+}
+.chip-version {
+    padding: 4px 9px;
+    font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
+
+/* 節點顏色 */
+.chip-prod   { background: color-mix(in srgb,#10b981 10%,transparent); color:#059669; border-color:color-mix(in srgb,#10b981 30%,transparent); }
+.chip-backup { background: color-mix(in srgb,#f59e0b 10%,transparent); color:#b45309; border-color:color-mix(in srgb,#f59e0b 30%,transparent); }
+.chip-dev    { background: color-mix(in srgb,#818cf8 10%,transparent); color:#4f46e5; border-color:color-mix(in srgb,#818cf8 30%,transparent); }
+.chip-local  { background: color-mix(in srgb,#94a3b8 10%,transparent); color:#64748b; border-color:color-mix(in srgb,#94a3b8 30%,transparent); }
+.chip-none   { background: color-mix(in srgb,#818cf8 10%,transparent); color:#4f46e5; border-color:color-mix(in srgb,#818cf8 30%,transparent); }
+
+/* 深色主題下顏色調亮 */
+html[data-theme='dark'] .chip-prod   { color:#34d399; }
+html[data-theme='dark'] .chip-backup { color:#fbbf24; }
+html[data-theme='dark'] .chip-dev    { color:#a5b4fc; }
+html[data-theme='dark'] .chip-local  { color:#94a3b8; }
+html[data-theme='dark'] .chip-none   { color:#a5b4fc; }
+
+/* ============================================================
+   移除 Image 對話框
+   ============================================================ */
+
+/* 步驟指示 */
+.ri-steps {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+.ri-step {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--muted);
+    padding: 4px 10px;
+    border-radius: 99px;
+    background: var(--panel-alt);
+    border: 1px solid var(--border-color);
+    transition: all 0.2s;
+}
+.ri-step.active {
+    color: var(--brand);
+    background: var(--brand-muted);
+    border-color: color-mix(in srgb, var(--brand) 30%, transparent);
+}
+.ri-step-arrow { color: var(--muted); font-size: 16px; line-height: 1; }
+
+/* 分類選擇卡片 */
+.ri-category-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+.ri-cat-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 18px 16px;
+    border-radius: 12px;
+    border: 2px solid var(--border-color);
+    background: var(--panel-alt);
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-family: inherit;
+    text-align: center;
+}
+.ri-cat-btn svg { width: 24px; height: 24px; }
+.ri-cat-btn span { font-size: 15px; font-weight: 600; color: var(--text); }
+.ri-cat-btn small { font-size: 11px; color: var(--muted); letter-spacing: 0.02em; }
+.ri-cat-btn:hover:not(.selected) {
+    border-color: var(--brand);
+    background: var(--brand-muted);
+}
+.ri-cat-btn.selected {
+    border-color: var(--brand);
+    background: var(--brand-muted);
+    color: var(--brand);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 12%, transparent);
+}
+.ri-cat-btn.selected span { color: var(--brand); }
+
+/* 版本清單區 */
+.ri-list-wrap {
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    overflow: hidden;
+}
+.ri-list-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    background: var(--panel-alt);
+    border-bottom: 1px solid var(--border-color);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+}
+.ri-sel-count { font-size: 12px; font-weight: 400; color: var(--muted); }
+
+/* Loading / Empty */
+.ri-loading, .ri-empty {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 24px 20px;
+    font-size: 13px;
+    color: var(--muted);
+}
+.ri-empty svg { width: 18px; height: 18px; flex-shrink: 0; opacity: 0.5; }
+.ri-spinner {
+    width: 16px; height: 16px;
+    border: 2px solid var(--border-color);
+    border-top-color: var(--brand);
+    border-radius: 50%;
+    animation: spin 0.75s linear infinite;
+    flex-shrink: 0;
+}
+
+/* 版本行列表 */
+.ri-list {
+    max-height: 320px;
+    overflow-y: auto;
+}
+.ri-list::-webkit-scrollbar { width: 5px; }
+.ri-list::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 99px; }
+
+.ri-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 16px;
+    cursor: pointer;
+    transition: background 0.15s;
+    border-bottom: 1px solid var(--border-color);
+    user-select: none;
+}
+.ri-item:last-child { border-bottom: none; }
+.ri-item:hover:not(.is-current) { background: var(--panel-alt); }
+.ri-item.is-current { opacity: 0.55; cursor: not-allowed; }
+.ri-item.is-selected { background: var(--brand-muted); }
+
+.ri-checkbox {
+    margin-top: 3px;
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    cursor: pointer;
+    accent-color: var(--brand);
+}
+.ri-item.is-current .ri-checkbox { cursor: not-allowed; }
+
+.ri-item-body { flex: 1; min-width: 0; }
+.ri-item-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+    flex-wrap: wrap;
+}
+.ri-proj {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+}
+.ri-node-tag {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 99px;
+    border: 1px solid transparent;
+}
+.rn-prod   { background:color-mix(in srgb,#10b981 12%,transparent); color:#059669; border-color:color-mix(in srgb,#10b981 30%,transparent); }
+.rn-backup { background:color-mix(in srgb,#f59e0b 12%,transparent); color:#b45309; border-color:color-mix(in srgb,#f59e0b 30%,transparent); }
+.rn-dev    { background:color-mix(in srgb,#818cf8 12%,transparent); color:#4f46e5; border-color:color-mix(in srgb,#818cf8 30%,transparent); }
+.rn-local  { background:color-mix(in srgb,#94a3b8 12%,transparent); color:#64748b; border-color:color-mix(in srgb,#94a3b8 30%,transparent); }
+
+html[data-theme='dark'] .rn-prod   { color:#34d399; }
+html[data-theme='dark'] .rn-backup { color:#fbbf24; }
+html[data-theme='dark'] .rn-dev    { color:#a5b4fc; }
+html[data-theme='dark'] .rn-local  { color:#94a3b8; }
+
+.ri-in-use-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--success);
+    background: color-mix(in srgb, var(--success) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--success) 30%, transparent);
+    padding: 2px 8px;
+    border-radius: 99px;
+}
+.ri-in-use-badge svg { width: 11px; height: 11px; }
+
+.ri-ver {
+    font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+    font-size: 12px;
+    color: var(--muted);
+    letter-spacing: 0.03em;
+    word-break: break-all;
+}
+.ri-item.is-selected .ri-ver { color: var(--brand); }
+
+/* 警告提示列 */
+.ri-warning {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    background: color-mix(in srgb, var(--danger) 8%, var(--panel));
+    border-top: 1px solid color-mix(in srgb, var(--danger) 25%, transparent);
+    font-size: 13px;
+    color: var(--danger);
+}
+.ri-warning svg { width: 16px; height: 16px; flex-shrink: 0; }
+.ri-warning strong { font-weight: 700; }
 </style>
 
