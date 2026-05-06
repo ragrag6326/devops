@@ -253,8 +253,13 @@ public class MonitorServiceImpl extends ServiceImpl<SystemAudLogMapper, SystemAu
         return new PageBean(pageList.getTotal(), pageList.getResult());
     }
 
+    /**
+     * 6.0.5.3 取得(前端)機器上的版本號，退版用
+     * @param projectName
+     * @return
+     */
     @Override
-    public List<ImageInfoDTO> getDockerImageVersions(String projectName) {
+    public List<ImageInfoDTO> getRollBackImageVersions(String projectName) {
         List<ImageInfoDTO> result = new ArrayList<>();
         // 定義你想區分的類型
         Map<String, List<String>> versionMap = new HashMap<>();
@@ -298,6 +303,90 @@ public class MonitorServiceImpl extends ServiceImpl<SystemAudLogMapper, SystemAu
         }
         return result;
     }
+
+
+    /**
+     * 6.0.5.1 取得 自動部署(當前)機器上的版本號 / 歷史版本
+     * @return
+     */
+    @Override
+    public List<String> getDockerImageVersions(String type) {
+        String scriptPath = "/opt/vcs/tools/common/manage_images.sh";
+        ProcessBuilder pb = new ProcessBuilder("bash", scriptPath , type );
+
+        List<String> resultList = new ArrayList<>();
+
+        try {
+            Process process = pb.start();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+
+                    // 確保不是空字串
+                    if (line == null || line.trim().isEmpty()) {
+                        continue;
+                    }
+
+                    // 找尋最後一個 "/" 的位置
+                    int lastSlashIndex = line.lastIndexOf("/");
+
+                    if (lastSlashIndex != -1) {
+                        // 擷取最後一個 "/" 之後的所有字串 (例如 go_nuxt-backup:1.0.6)
+                        String imageVersion = line.substring(lastSlashIndex + 1);
+                        resultList.add(imageVersion);
+                    } else {
+                        // 如果字串裡面完全沒有 "/", 視情況直接加入
+                        // 例如原本就只傳 "go_nuxt-backup:1.0.6" 的情況
+                        resultList.add(line);
+                    }
+                }
+            }
+            process.waitFor();
+
+        } catch (Exception e) {
+            log.error("抓取版本失敗", e);
+        }
+        return resultList;
+    }
+
+    /**
+        6.0.7 移除機器上的版本號
+     */
+    @Override
+    public String deleteImage(String imageName) {
+
+        String scriptPath = "/opt/vcs/tools/common/manage_images.sh";
+        ProcessBuilder pb = new ProcessBuilder("bash", scriptPath , "delete" , imageName );
+
+        try {
+            Process process = pb.start();
+
+            // 讀取腳本的標準輸出 (Optional: 如果想知道腳本印了什麼)
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    log.info("6.0.7 移除機器上的版本號 Script Output: {}", line);
+                }
+            }
+
+            // 等待腳本執行結束並取得返回值
+            int exitCode = process.waitFor();
+            if (exitCode == 0) {
+                log.info("{} 刪除成功" , imageName);
+
+                return "刪除成功";
+            } else {
+                log.info("{} 刪除失敗失敗，代碼: {}" , imageName , exitCode);
+            }
+            return "刪除失敗";
+
+        } catch (IOException | InterruptedException e) {
+            log.error("執行腳本時發生錯誤", e);
+            // 發生異常時，視為檢查失敗返回 1
+            return "script 執行失敗";
+        }
+    }
+
 
     @Override
     public String renewImage(String opertaionName , String projectName, String nodeType, String version) {

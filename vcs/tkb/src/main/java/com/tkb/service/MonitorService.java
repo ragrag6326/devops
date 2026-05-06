@@ -25,7 +25,11 @@ public interface MonitorService extends IService<SystemAudLogEntity> {
 
     PageBean page(Integer page, Integer pageSize, String projectName, String status, LocalDate startDate, LocalDate endDate);
 
-    List<ImageInfoDTO> getDockerImageVersions(String projectName);
-
     String renewImage(String opertaionName , String projectName, String nodeType, String version);
+
+    List<ImageInfoDTO> getRollBackImageVersions(String projectName);
+
+    String deleteImage(String imageName);
+
+    List<String> getDockerImageVersions(String type);
 }

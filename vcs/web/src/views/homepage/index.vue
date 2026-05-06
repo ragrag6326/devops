@@ -33,13 +33,15 @@ const carouselIntervalMs = 4500;
 // 每張圖片底下的說明文字：用「檔名」對應
 // 你之後只要新增圖片檔案並補上對應說明即可
 const bgCaptionsByFile = {
+  '1760253304510.gif' : '本來應該從從容容 游刃有餘..',
+  'swimming.png' : '沒游泳的 賴祥德',
   'kp.png': '我是不會投降的。',
   '昌.png': '太離譜了，實在太離譜了',
   'liar.png': '不是喔! 不是這樣喔。',
   'koreafish.png': '我跟你談大海，你跟談我漱口杯',
 };
 
-const bgImageModules = import.meta.glob('../../assets/*.png', {
+const bgImageModules = import.meta.glob('../../assets/*.{gif,png}', {
   eager: true,
   import: 'default',
 });

@@ -96,13 +96,23 @@ public class MonitorController {
         return Result.success(traffic);
     }
 
-    @Operation(summary = "6.0.5 取得機器上的版本號", description = "取得機器上的版本號")
-    @GetMapping("/getImageVersion")
-    public Result<List> getImageVersion(
+    @Operation(summary = "6.0.5.1 取得所有自動部署 (歷史/現在) 版號", description = "取得機器上 (歷史/現在) 版號")
+    @GetMapping("/getImageVersion/{type}")
+    public Result<List> getDockerImageVersion(
+            @Parameter(description = "歷史/現在", required = true, example = "current/history")
+            @PathVariable String type
+    ) {
+        List<String> dockerImageVersions = MonitorService.getDockerImageVersions(type);
+        return Result.success(dockerImageVersions);
+    }
+
+    @Operation(summary = "6.0.5.2 取得(前端)機器上的版本號，退版用", description = "前端退版專用")
+    @GetMapping("/getRollBackImageVersion")
+    public Result<List> getRollBackImageVersion(
             @Parameter(description = "專案名稱", required = true, example = "go_nuxt")
             @RequestParam String projectName
     ) {
-        List<ImageInfoDTO> dockerImageVersions = MonitorService.getDockerImageVersions(projectName);
+        List<ImageInfoDTO> dockerImageVersions = MonitorService.getRollBackImageVersions(projectName);
         return Result.success(dockerImageVersions);
     }
 
@@ -119,7 +129,18 @@ public class MonitorController {
         return Result.success(result);
     }
 
-    @Operation(summary = "6.0.7 稽核日誌分頁查詢", description = "根據條件篩選並分頁顯示操作日誌")
+    @Operation(summary = "6.0.7 移除機器上的版本號", description = "版號移除")
+    @GetMapping("/deleteImage")
+    public Result<String> deleteImage(
+            @Parameter(description = "映像名稱", required = true, example = "frontend-prod/go_nuxt-backup:1.0.16")
+            @RequestParam String imageName
+    ) {
+        String deleteResult = MonitorService.deleteImage(imageName);
+        return Result.success(deleteResult);
+    }
+
+
+    @Operation(summary = "6.0.8 稽核日誌分頁查詢", description = "根據條件篩選並分頁顯示操作日誌")
     @GetMapping("/list")
     public Result getAudLogPage(
             @Parameter(description = "頁碼 (預設 1)", example = "1")
