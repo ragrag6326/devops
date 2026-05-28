@@ -1,0 +1,96 @@
+{
+  "name": "MR AI Code Review",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "78cefc00-1d06-479f-9420-a86570562801",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "a1b2c3d4-webhook-0001",
+      "name": "Webhook_接收VCS",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300],
+      "webhookId": "78cefc00-1d06-479f-9420-a86570562801"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst body = input.body ?? input;\n\nconst changes = body.changes || [];\nlet diffText = '';\nfor (const c of changes) {\n  diffText += `\\n### ${c.new_path || c.old_path}\\n`;\n  diffText += (c.diff || '').slice(0, 12000);\n}\nif (!diffText.trim()) {\n  diffText = '(無 diff 內容)';\n}\n\nconst prompt = `你是資深 Code Reviewer。請審核以下 GitLab Merge Request 變更。\\n\\n專案: ${body.projectName}\\nMR: !${body.mrIid} - ${body.title}\\n作者: ${body.authorName || 'unknown'}\\n\\n請用繁體中文回覆，並嚴格輸出 JSON（不要 markdown code fence）：\\n{\\n  \"summary\": \"一句話摘要\",\\n  \"suggestions\": \"Markdown 條列建議\",\\n  \"fullReview\": \"完整審核說明\",\\n  \"severity\": 1-5 整數\\n}\\n\\n--- DIFF ---\\n${diffText}`;\n\nreturn [{\n  json: {\n    reviewId: body.reviewId,\n    callbackUrl: body.callbackUrl,\n    projectName: body.projectName,\n    mrIid: body.mrIid,\n    prompt\n  }\n}];"
+      },
+      "id": "a1b2c3d4-code-0002",
+      "name": "Code_組裝Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [260, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4o-mini\",\n  \"temperature\": 0.2,\n  \"messages\": [\n    {\"role\": \"system\", \"content\": \"你只輸出 JSON，不要其他文字。\"},\n    {\"role\": \"user\", \"content\": {{ JSON.stringify($json.prompt) }}}\n  ]\n}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-http-0003",
+      "name": "HTTP_呼叫AI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [520, 300],
+      "notes": "請設定 Header Auth: Authorization = Bearer <YOUR_OPENAI_KEY>。若用 Ollama/其他相容 API 請改 URL 與 body。"
+    },
+    {
+      "parameters": {
+        "jsCode": "const prev = $('Code_組裝Prompt').first().json;\nconst ai = $input.first().json;\n\nfunction extractAiText(payload) {\n  if (!payload) return '';\n  if (typeof payload === 'string') return payload;\n  if (payload.choices?.[0]?.message?.content) return payload.choices[0].message.content;\n  if (Array.isArray(payload)) {\n    const first = payload[0];\n    if (first?.content?.parts?.[0]?.text) return first.content.parts[0].text;\n    return extractAiText(first);\n  }\n  if (payload.content?.parts?.[0]?.text) return payload.content.parts[0].text;\n  if (payload.body) return extractAiText(payload.body);\n  if (payload.data) return extractAiText(payload.data);\n  return '';\n}\n\nlet content = extractAiText(ai) || JSON.stringify(ai);\ncontent = content.trim().replace(/^```json\\s*/i, '').replace(/^```\\s*/i, '').replace(/```\\s*$/i, '');\n\nlet parsed;\ntry {\n  parsed = JSON.parse(content);\n} catch (e) {\n  parsed = { summary: 'AI 回覆解析失敗', suggestions: content, fullReview: content, severity: 3 };\n}\n\nfunction suggestionsToText(suggestions) {\n  if (!suggestions) return '';\n  if (typeof suggestions === 'string') return suggestions;\n  if (Array.isArray(suggestions)) {\n    return suggestions.filter(Boolean).map((s) => (String(s).trim().startsWith('- ') ? String(s).trim() : `- ${String(s).trim()}`)).join('\\n\\n');\n  }\n  return String(suggestions);\n}\nconst suggestionsText = suggestionsToText(parsed.suggestions);\nreturn [{\n  json: {\n    reviewId: prev.reviewId,\n    callbackUrl: prev.callbackUrl,\n    status: 'COMPLETED',\n    summary: parsed.summary || '',\n    suggestions: suggestionsText,\n    fullReview: parsed.fullReview || suggestionsText || content,\n    severity: Number(parsed.severity) || 3\n  }\n}];"
+      },
+      "id": "a1b2c3d4-code-0004",
+      "name": "Code_解析AI結果",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [780, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.callbackUrl }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"reviewId\": {{ $json.reviewId }},\n  \"status\": \"{{ $json.status }}\",\n  \"summary\": {{ JSON.stringify($json.summary) }},\n  \"suggestions\": {{ JSON.stringify($json.suggestions) }},\n  \"fullReview\": {{ JSON.stringify($json.fullReview) }},\n  \"severity\": {{ $json.severity }}\n}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-http-0005",
+      "name": "HTTP_回寫VCS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1040, 300],
+      "notes": "callbackUrl 由 VCS 後端傳入，預設 http://192.168.1.35:8000/api/mr-review/callback"
+    }
+  ],
+  "connections": {
+    "Webhook_接收VCS": {
+      "main": [[{ "node": "Code_組裝Prompt", "type": "main", "index": 0 }]]
+    },
+    "Code_組裝Prompt": {
+      "main": [[{ "node": "HTTP_呼叫AI", "type": "main", "index": 0 }]]
+    },
+    "HTTP_呼叫AI": {
+      "main": [[{ "node": "Code_解析AI結果", "type": "main", "index": 0 }]]
+    },
+    "Code_解析AI結果": {
+      "main": [[{ "node": "HTTP_回寫VCS", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "mr-code-review-v1",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

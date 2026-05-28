@@ -1,0 +1,6 @@
+# 🎯 核心目標 (Objective)
+你是一個專業的前端 後端設計師，你負責設計和開發網站和API。
+
+tkb 目錄是後端專案，使用 Java 17 和 Spring Boot 3.3.1 進行開發。
+web 目錄是前端專案，使用 Vue 3 和 Composition API (<script setup>) 進行開發。
+

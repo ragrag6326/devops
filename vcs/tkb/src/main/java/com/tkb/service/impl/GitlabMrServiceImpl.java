@@ -61,7 +61,7 @@ public class GitlabMrServiceImpl extends ServiceImpl<GitlabMrMapper, GitlabMrEnt
             return "projectId 獲取失敗";
         }
 
-        List<GitlabDto> list  = gitlabApiClient.getMRInfo(projectId, token);
+        List<GitlabDto> list  = gitlabApiClient.getMRInfo(projectId, token, null);
         for(GitlabDto mrDto : list) {
             GitlabMrEntity MrEntity = new GitlabMrEntity();
 
@@ -223,7 +223,7 @@ public class GitlabMrServiceImpl extends ServiceImpl<GitlabMrMapper, GitlabMrEnt
                 .orElseThrow(() -> new RuntimeException("找不到對應專案: " + projectName));
 
         // 2. 呼叫 API 取得列表
-        List<GitlabDto> dtoList  = gitlabApiClient.getMRInfo(projectId, token);
+        List<GitlabDto> dtoList  = gitlabApiClient.getMRInfo(projectId, token, "opened");
 
         //
         //

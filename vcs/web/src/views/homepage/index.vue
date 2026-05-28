@@ -1,12 +1,15 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
 // 引入需要的圖標
 import { 
   Promotion, Check, CircleClose, FolderOpened, 
-  Bell, Timer, DataLine 
+  Bell, Timer, DataLine, MagicStick
 } from '@element-plus/icons-vue';
-// 假設您有封裝好的 request，如果沒有請替換為 axios
-import request from '@/utils/request'; 
+import request from '@/utils/request';
+import { getMrReviewDetail } from '@/api/mrReview';
+
+const router = useRouter(); 
 
 // --- 1. 原本的儀表板數據 ---
 const stats = ref([
@@ -144,6 +147,38 @@ const formatMarkdown = (text) => {
 
 const mrCountsMap = ref({}); // 紀錄各專案的 MR 數量
 const mrDataMap = ref({}); // 結構：{ tkbtv: { count: 1, list: [...] } }
+const mrReviewMap = ref({}); // key: projectName-iid -> review entity
+
+const reviewStatusLabel = (status) => {
+  const map = {
+    PENDING: { type: 'warning', text: 'AI 審核中' },
+    COMPLETED: { type: 'success', text: 'AI 已審核' },
+    FAILED: { type: 'danger', text: 'AI 審核失敗' }
+  };
+  return map[status] || { type: 'info', text: '未審核' };
+};
+
+const loadReviewsForPendingMrs = async () => {
+  const tasks = [];
+  Object.entries(mrDataMap.value).forEach(([projectName, data]) => {
+    (data.list || []).forEach((mr) => {
+      tasks.push(
+        getMrReviewDetail(projectName, mr.iid)
+          .then((res) => {
+            if (res.code === 1 && res.data) {
+              mrReviewMap.value[`${projectName}-${mr.iid}`] = res.data;
+            }
+          })
+          .catch(() => {})
+      );
+    });
+  });
+  await Promise.all(tasks);
+};
+
+const goMrReviewPage = () => {
+  router.push('/mr/review');
+};
 
 // --- 獲取待處理 MR 數量 ---
 const fetchPendingMRs = async () => {
@@ -190,6 +225,8 @@ const fetchPendingMRs = async () => {
       mrStat.value = totalCount.toString();
       mrStat.details = details; // 新增這行
     }
+
+    await loadReviewsForPendingMrs();
 
   } catch (error) {
     console.error('Fetch all pending MRs error', error);
@@ -358,19 +395,37 @@ onUnmounted(() => {
               <div class="release-content-box custom-scrollbar">
                 <div v-html="formatMarkdown(releaseNotes[source.key])" class="markdown-body"></div>
                 <div v-if="mrDataMap[source.name] && mrDataMap[source.name].count > 0" class="mr-section">
-                    <h4 class="mr-section-title">
-                      <el-icon style="margin-right: 6px;"><Promotion /></el-icon>
-                      待處理 Merge Requests
-                    </h4>
+                    <div class="mr-section-head">
+                      <h4 class="mr-section-title">
+                        <el-icon style="margin-right: 6px;"><Promotion /></el-icon>
+                        待處理 Merge Requests
+                      </h4>
+                      <el-button link type="primary" size="small" @click="goMrReviewPage">
+                        <el-icon><MagicStick /></el-icon> AI 審核中心
+                      </el-button>
+                    </div>
                     <div v-for="mr in mrDataMap[source.name].list" :key="mr.iid" class="mr-item">
                       <div class="mr-item-header">
                         <span class="mr-iid">!{{ mr.iid }}</span>
                         <span class="mr-title">{{ mr.title }}</span>
+                        <el-tag
+                          v-if="mrReviewMap[`${source.name}-${mr.iid}`]"
+                          size="small"
+                          :type="reviewStatusLabel(mrReviewMap[`${source.name}-${mr.iid}`].reviewStatus).type"
+                        >
+                          {{ reviewStatusLabel(mrReviewMap[`${source.name}-${mr.iid}`].reviewStatus).text }}
+                        </el-tag>
                       </div>
                       <div class="mr-item-footer">
                         <span>提交者：<strong>{{ mr.authorName }}</strong></span>
                         <span><el-icon><Timer /></el-icon> {{ mr.createdAt }}</span>
                       </div>
+                      <p
+                        v-if="mrReviewMap[`${source.name}-${mr.iid}`]?.summary"
+                        class="mr-review-summary"
+                      >
+                        {{ mrReviewMap[`${source.name}-${mr.iid}`].summary }}
+                      </p>
                     </div>
                   </div>
               </div>
@@ -617,14 +672,34 @@ onUnmounted(() => {
   border: 1px solid var(--border-color);
 }
 
+.mr-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
 .mr-section-title {
-  margin: 0 0 15px 0;
+  margin: 0;
   font-size: 16px;
   font-weight: bold;
-  /* 強制顏色：使用主色調或白色，避免被背景吃掉 */
-  color: #60a5fa !important; 
+  color: #60a5fa !important;
   display: flex;
   align-items: center;
+}
+
+.mr-review-summary {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  line-height: 1.5;
+}
+
+.mr-item-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .mr-item {

@@ -25,6 +25,7 @@ const menuItems = [
         name: 'MR / 程式碼審核', path: '/mr', icon: '⎇',
         children: [
             { name: '歷史紀錄查詢', path: '/mr/history' },
+            { name: 'AI 程式碼審核', path: '/mr/review' },
         ]
     },
     {

@@ -60,3 +60,6 @@ CREATE TABLE `user` (
 
 INSERT INTO `user` (`username`, `password`, `name`, `role`) VALUES
 ('admin', 'admin', '系統管理員', 'ADMIN');
+
+-- MR AI Code Review（詳見 infa/mr_code_review.sql）
+-- CREATE TABLE `mr_code_reviews` (...);

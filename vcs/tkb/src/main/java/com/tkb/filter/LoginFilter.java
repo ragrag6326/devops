@@ -27,7 +27,9 @@ public class LoginFilter implements Filter {
             "/swagger-ui",            // Swagger 原生頁面資源
             "/swagger-resources",     // Swagger 資源配置
             "/favicon.ico",           // 瀏覽器圖標
-            "/error"                  // Spring Boot 預設錯誤頁 (避免無限循環)
+            "/error",                 // Spring Boot 預設錯誤頁 (避免無限循環)
+            "/mr-review/callback",       // N8N 回寫 AI 審核結果
+            "/mr-review/gitlab-webhook"  // GitLab MR Webhook
     };
 
 

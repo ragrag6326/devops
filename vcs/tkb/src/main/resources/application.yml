@@ -27,14 +27,34 @@ logging:
 
 gitlab:
   url: "http://192.168.1.35/api/v4"
-  token: "glpat-RNWpFjH1gjuAx8Z4NI7iHm86MQp1OnkH.01.0w1jy1uvp" #2026/12/28 過期
+  token: "glpat-Umf7tbJRMxSuetOZe0v_W286MQp1OnkH.01.0w1s5ixl6" #2027/05/18 過期
   projects:
-    - name: test
-      id: 40857903
     - name: tkbgoapi
       id: 13
     - name: tkbtv
       id: 3
+    - name: go_nuxt
+      id: 17
+    - name: tkbtv_admin
+      id: 33
+
+# MR AI Code Review → N8N Webhook
+n8n:
+  mr-review:
+    # 請依實際 N8N 環境調整（可為內網直連或經 gateway）
+    webhook-url: "http://192.168.1.35:8010/n8n-proxy/webhook/78cefc00-1d06-479f-9420-a86570562801"
+    auth-header: "Authorization"
+    auth-token: "zlbYPGSyoOAhmorUsEougwTUth3psStKidz2"
+    callback-base-url: "http://192.168.1.35:8000/api/mr-review/callback"
+
+mr-review:
+  # GitLab Webhook 設定的 Secret token（與 X-Gitlab-Token 一致，留空則不驗證）
+  gitlab-webhook-secret: "vzbb16DVhTWaJsBeCfzcrpf6"
+  # 審核完成後自動在 GitLab MR 討論區留言（Overview 頁可見）
+  post-gitlab-comment: true
+  scheduler:
+    enabled: false
+    cron: "0 */10 * * * ?"
 
 knife4j:
   enable: true
