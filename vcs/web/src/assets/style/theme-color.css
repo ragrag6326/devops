@@ -1,7 +1,8 @@
 /* 通用設定 (不分主題) */
 :root {
   --radius: 12px;
-  --transition-speed: 0.3s;
+  --transition-speed: 0.25s;
+  color-scheme: light dark;
 }
 
 * {
@@ -10,74 +11,164 @@
 
 /* --- Light Theme 變數 --- */
 html[data-theme='light'] {
-  /* --- 品牌色 (保持不變，或稍微加深一點增加專業感) --- */
-  --brand: #3b82f6;          /* 稍微亮一點的藍 */
-  --brand-strong: #1d4ed8;
-  
-  /* --- 核心背景色調整 --- */
-  /* 使用帶有一點點藍調的灰，跟純白卡片區分開來 */
-  --bg: #eef2f6;             
-  
-  /* --- 面板與卡片 --- */
-  --panel: #ffffff;          /* 純白 */
-  --panel-alt: #f8fafc;      /* 很淺的灰，用於 hover 或次要區塊 */
-  
-  /* --- 邊框 (關鍵修正) --- */
-  /* 加深邊框顏色，讓輸入框和卡片邊緣清晰可見 */
-  --border-color: #cbd5e1;   /* 相當於 rgba(0,0,0, 0.2) 左右的強度 */
-  
-  /* --- 文字顏色 --- */
-  --text: #0f172a;           /* 接近純黑的深藍灰，閱讀對比度更高 */
-  --muted: #64748b;          /* 加深的灰色，不會看不清楚 */
-  
-  /* --- 狀態色 --- */
+  --brand: #4f46e5;
+  --brand-strong: #3730a3;
+  --brand-muted: rgba(79, 70, 229, 0.1);
+  --brand-glow: rgba(79, 70, 229, 0.25);
+  --secondary-color: #e11d48;
+  --secondary-muted: rgba(225, 29, 72, 0.1);
   --accent: #f59e0b;
+  --accent-muted: rgba(245, 158, 11, 0.12);
+  --accent-gold: linear-gradient(to right, #d97706, #f59e0b, #d97706);
+  --accent-gold-solid: #d97706;
+  --primary-color: var(--brand);
+  --bg: #f8f7ff;
+  --panel: #ffffff;
+  --panel-alt: #f3f2fc;
+  --panel-elevated: #ffffff;
+  --border-color: #e0dff7;
+  --border-color-light: #eeedf9;
+  --text: #1a1835;
+  --muted: #6b7280;
+  --text-placeholder: #9ca3af;
   --danger: #ef4444;
   --success: #10b981;
-  
-  /* --- 圓角與陰影 --- */
-  --radius: 8px;             /* 稍微方一點，看起來比較俐落 (可選) */
-  /* 陰影稍微加重一點，增加立體感 */
-  --shadow: 
-    0 1px 3px 0 rgba(0, 0, 0, 0.1), 
-    0 1px 2px -1px rgba(0, 0, 0, 0.1);
-
-  /* --- 特殊樣式變數化 --- */
+  --warning: #f59e0b;
+  --info: #6366f1;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-lg: 16px;
+  --shadow: 0 1px 3px rgba(79, 70, 229, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 16px rgba(79, 70, 229, 0.08), 0 1px 4px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 12px 40px rgba(79, 70, 229, 0.12), 0 4px 12px rgba(0, 0, 0, 0.06);
   --body-bg-image: none;
-  --navbar-bg: rgba(255, 255, 255, 0.95); /* 不透明度提高，避免雜亂 */
-
-  --table-text-color: #334155;
-  --table-header-text-color: #0f172a;
-  --table-border-color: #e2e8f0;
+  --navbar-bg: rgba(255, 255, 255, 0.88);
+  --glass-bg: rgba(255, 255, 255, 0.92);
+  --glass-border: rgba(79, 70, 229, 0.1);
+  --table-text-color: #374151;
+  --table-header-text-color: #1a1835;
+  --table-border-color: #e0dff7;
   --table-bg-color: #ffffff;
-  --table-hover-bg: #f1f5f9;
+  --table-header-bg: #f3f2fc;
+  --table-hover-bg: rgba(79, 70, 229, 0.05);
+  --el-color-primary: var(--brand);
+  --el-color-primary-light-3: #818cf8;
+  --el-color-primary-light-5: #a5b4fc;
+  --el-color-primary-light-7: rgba(79, 70, 229, 0.2);
+  --el-color-primary-light-8: rgba(79, 70, 229, 0.12);
+  --el-color-primary-light-9: rgba(79, 70, 229, 0.06);
+  --el-color-success: var(--success);
+  --el-color-warning: var(--warning);
+  --el-color-danger: var(--danger);
+  --el-color-info: var(--info);
+  --el-border-radius-base: var(--radius-sm);
+  --el-border-radius: var(--radius);
+  --el-bg-color: var(--panel);
+  --el-bg-color-page: var(--bg);
+  --el-bg-color-overlay: var(--panel);
+  --el-text-color-primary: var(--text);
+  --el-text-color-regular: var(--text);
+  --el-text-color-secondary: var(--muted);
+  --el-text-color-placeholder: var(--text-placeholder);
+  --el-border-color: var(--border-color);
+  --el-border-color-light: var(--border-color-light);
+  --el-border-color-lighter: #eeedf9;
+  --el-fill-color: var(--panel-alt);
+  --el-fill-color-light: #fafafa;
+  --el-fill-color-blank: var(--panel);
+  --el-box-shadow: var(--shadow-md);
+  --el-box-shadow-light: var(--shadow);
+  --el-message-bg: var(--panel);
+  --el-message-border: var(--border-color);
+  --el-message-text: var(--text);
+  --el-dialog-bg: var(--panel);
+  --el-dialog-border: var(--border-color);
+  --el-dialog-title: var(--text);
+  --el-dialog-body: var(--muted);
+  --text-main: var(--text);
+  --text-sub: var(--muted);
 }
 
 /* --- Dark Theme 變數 --- */
 html[data-theme='dark'] {
-  --brand: #6c5ce7;
-  --brand-strong: #4834d4;
-  --bg: #0f172a;
-  --panel: #1e293b;
-  --panel-alt: #243554;
-  --text: #e2e8f0;
-  --muted: #94a3b8;
-  --accent: #facc15;
+  --brand: #818cf8;
+  --brand-strong: #a5b4fc;
+  --brand-muted: rgba(129, 140, 248, 0.14);
+  --brand-glow: rgba(129, 140, 248, 0.3);
+  --secondary-color: #f472b6;
+  --secondary-muted: rgba(244, 114, 182, 0.12);
+  --accent: #fbbf24;
+  --accent-muted: rgba(251, 191, 36, 0.12);
+  --accent-gold: linear-gradient(to right, #d4af37, #fde68a, #d4af37);
+  --accent-gold-solid: #d4af37;
+  --primary-color: var(--brand);
+  --bg: #0d0f1a;
+  --panel: #13162a;
+  --panel-alt: #1a1e35;
+  --panel-elevated: #1e2240;
+  --border-color: #2a2e50;
+  --border-color-light: #1f2340;
+  --text: #e8e9f3;
+  --muted: #8b8fa8;
+  --text-placeholder: #4a4e68;
   --danger: #f87171;
   --success: #34d399;
-  --radius: 16px;
-  --shadow: 0 20px 45px -20px rgba(15, 23, 42, 0.8);
-
-  /* 特殊樣式變數化 */
-  --body-bg-image: radial-gradient(circle at top, rgba(76, 29, 149, 0.35), transparent 55%);
-  --navbar-bg: rgba(15, 23, 42, 0.7);
-  --border-color: rgba(148, 163, 184, 0.1);
-
-  --table-text-color: #cbd5e1;        /* 淺灰字 (Slate-300) */
-  --table-header-text-color: #94a3b8; /* 灰標題 */
-  --table-border-color: rgba(255, 255, 255, 0.08); /* 半透明白邊框 */
-  --table-bg-color: transparent;      /* 透明背景 */
-  --table-hover-bg: rgba(255, 255, 255, 0.05); /* Hover 時的半透明白 */
+  --warning: #fbbf24;
+  --info: #818cf8;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-lg: 16px;
+  --shadow: 0 4px 8px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.6), 0 8px 24px rgba(0, 0, 0, 0.4);
+  --body-bg-image:
+    radial-gradient(ellipse at 20% 10%, rgba(129, 140, 248, 0.06) 0%, transparent 60%),
+    radial-gradient(ellipse at 80% 90%, rgba(244, 114, 182, 0.05) 0%, transparent 60%);
+  --navbar-bg: rgba(19, 22, 42, 0.9);
+  --glass-bg: rgba(19, 22, 42, 0.85);
+  --glass-border: rgba(129, 140, 248, 0.1);
+  --table-text-color: #d4d6e8;
+  --table-header-text-color: #e8e9f3;
+  --table-border-color: #2a2e50;
+  --table-bg-color: #13162a;
+  --table-header-bg: #1a1e35;
+  --table-hover-bg: rgba(129, 140, 248, 0.08);
+  --el-color-primary: var(--brand);
+  --el-color-primary-light-3: #a5b4fc;
+  --el-color-primary-light-5: #c7d2fe;
+  --el-color-primary-light-7: rgba(129, 140, 248, 0.2);
+  --el-color-primary-light-8: rgba(129, 140, 248, 0.14);
+  --el-color-primary-light-9: rgba(129, 140, 248, 0.08);
+  --el-color-success: var(--success);
+  --el-color-warning: var(--warning);
+  --el-color-danger: var(--danger);
+  --el-color-info: var(--info);
+  --el-border-radius-base: var(--radius-sm);
+  --el-border-radius: var(--radius);
+  --el-bg-color: var(--panel);
+  --el-bg-color-page: var(--bg);
+  --el-bg-color-overlay: var(--panel-elevated);
+  --el-text-color-primary: var(--text);
+  --el-text-color-regular: var(--text);
+  --el-text-color-secondary: var(--muted);
+  --el-text-color-placeholder: var(--text-placeholder);
+  --el-border-color: var(--border-color);
+  --el-border-color-light: var(--border-color-light);
+  --el-border-color-lighter: #1a1e35;
+  --el-fill-color: var(--panel-alt);
+  --el-fill-color-light: rgba(255, 255, 255, 0.04);
+  --el-fill-color-blank: var(--panel);
+  --el-box-shadow: var(--shadow-md);
+  --el-box-shadow-light: var(--shadow);
+  --el-message-bg: var(--panel-elevated);
+  --el-message-border: var(--border-color);
+  --el-message-text: var(--text);
+  --el-dialog-bg: var(--panel);
+  --el-dialog-border: var(--border-color);
+  --el-dialog-title: var(--text);
+  --el-dialog-body: var(--muted);
+  --text-main: var(--text);
+  --text-sub: var(--muted);
 }
 
 body {
@@ -504,4 +595,33 @@ footer {
   .button.secondary {
     width: 100%;
   }
+}
+
+/* 全域滾動條樣式 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--border-color) 80%, transparent) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 99px;
+  transition: background 0.2s;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
 }

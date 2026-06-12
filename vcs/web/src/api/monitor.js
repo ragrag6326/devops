@@ -76,6 +76,21 @@ export function getImageVersion(projectName) {
   return request.get(`/monitor/getImageVersion?projectName=${projectName}`);
 }
 
+/** 取得目前運行中或歷史 image 清單 (current | history) */
+export function getImageVersionByType(type) {
+  return request.get(`/monitor/getImageVersion/${type}`);
+}
+
+/** 退版用：取得專案可選版本清單 */
+export function getRollBackImageVersion(projectName) {
+  return request.get('/monitor/getRollBackImageVersion', { params: { projectName } });
+}
+
+/** 移除 Docker image */
+export function deleteImage(imageName) {
+  return request.get('/monitor/deleteImage', { params: { imageName } });
+}
+
 /** 
  * 6.0.6 版本號更新
  * @param {object} params 更新image請求參數物件

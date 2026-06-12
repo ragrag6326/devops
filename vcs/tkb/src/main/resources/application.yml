@@ -35,6 +35,22 @@ gitlab:
       id: 13
     - name: tkbtv
       id: 3
+    - name: go_nuxt
+      id: 17
+
+n8n:
+  mr-review:
+    webhook-url: "http://192.168.1.35:90/webhook-test/78cefc00-1d06-479f-9420-a86570562801"
+    auth-header: "Authorization"
+    auth-token: "zlbYPGSyoOAhmorUsEougwTUth3psStKidz2"
+    callback-base-url: "http://192.168.1.35:8000/api/mr-review/callback"
+
+mr-review:
+  gitlab-webhook-secret: "change-me-gitlab-webhook-secret"
+  post-gitlab-comment: true
+  scheduler:
+    enabled: false
+    cron: "0 */10 * * * ?"
 
 knife4j:
   enable: true

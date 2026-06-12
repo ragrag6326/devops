@@ -1,265 +1,491 @@
 <script setup>
-import { ref } from 'vue'; // 移除 onMounted，因為目前沒有用到
-import { loginApi } from '@/api/login';
-import { ElMessage, ElMessageBox } from 'element-plus';
-import { useRouter } from 'vue-router';
-// 導入 Element Plus Icon
-import { User, Lock } from '@element-plus/icons-vue'; 
+import { ref } from 'vue'
+import { loginApi } from '@/api/login'
+import { ElMessage } from 'element-plus'
+import { useRouter } from 'vue-router'
 
-const router = useRouter();
+const router = useRouter()
 
-// 定義表單數據
 const loginForm = ref({
-    username: '',
-    password: ''
-});
+  username: '',
+  password: ''
+})
 
-// 定義表單驗證規則
-const loginRules = {
-    username: [
-        { required: true, message: '請輸入用戶名', trigger: 'blur' }
-    ],
-    password: [
-        { required: true, message: '請輸入密碼', trigger: 'blur' }
-    ]
-};
+const errors = ref({
+  username: '',
+  password: ''
+})
 
-// 定義一個 ref 來訪問 el-form 組件實例，用於觸發表單驗證
-const loginFormRef = ref(null); 
-// 定義 loading 狀態，控制按鈕的禁用和視覺效果
-const loading = ref(false);
+const loading = ref(false)
+const showPassword = ref(false)
+
+const validate = () => {
+  errors.value = { username: '', password: '' }
+  let valid = true
+
+  if (!loginForm.value.username.trim()) {
+    errors.value.username = '請輸入用戶帳號'
+    valid = false
+  }
+  if (!loginForm.value.password) {
+    errors.value.password = '請輸入密碼'
+    valid = false
+  }
+  return valid
+}
 
 const handleLogin = async () => {
-    // 1. 【加強】觸發表單驗證
-    const valid = await loginFormRef.value.validate().catch(() => false); // 捕獲驗證失敗的 promise
-    if (!valid) {
-        ElMessage.error('請檢查表單輸入！');
-        return; // 如果驗證失敗，直接返回
+  if (!validate()) return
+
+  loading.value = true
+  try {
+    const result = await loginApi(loginForm.value)
+
+    if (result.code === 1) {
+      ElMessage.success('登入成功')
+      localStorage.setItem('current_username', loginForm.value.username)
+      localStorage.setItem('jwt_token', result.data.token)
+      localStorage.setItem('current_id', result.data.id)
+      localStorage.setItem('current_role', result.data.role)
+      router.push('/homepage')
+    } else {
+      ElMessage.error(result.msg || '帳號或密碼錯誤')
     }
-
-    loading.value = true; // 開始登入，顯示 loading
-    try {
-        const result = await loginApi(loginForm.value);
-
-        if (result.code === 1) { // 建議明確比較 code 值
-            ElMessage.success("登入成功");
-
-            localStorage.setItem('current_username', loginForm.value.username); // 儲存用戶名
-            localStorage.setItem('jwt_token', result.data.token);
-            localStorage.setItem('current_id', result.data.id)      // 當前 ID
-            localStorage.setItem('current_role', result.data.role)  // 連 Role 一起存
-
-            router.push('/homepage');
-        } else {
-            // 後端返回的錯誤訊息
-            ElMessage.error(result.msg || '登入失敗，請檢查帳號密碼');
-        }
-    } catch (error) {
-        // 【加強】錯誤處理：例如網路錯誤、API 請求失敗等
-        console.error('登入請求失敗:', error);
-        ElMessage.error('網路或伺服器錯誤，請稍後再試。');
-    } finally {
-        loading.value = false; // 無論成功失敗，結束 loading
-    }
-};
+  } catch {
+    ElMessage.error('網路或伺服器錯誤，請稍後再試')
+  } finally {
+    loading.value = false
+  }
+}
 
 const handleClear = () => {
-    loginFormRef.value.resetFields(); // 【加強】使用 Element Plus 的 resetFields 方法清空並重置驗證狀態
-    // 或者 if you want to clear and not reset validation:
-    // loginForm.value = { username: '', password: '' }; 
-};
+  loginForm.value = { username: '', password: '' }
+  errors.value = { username: '', password: '' }
+}
+
+const onKeydown = (e) => {
+  if (e.key === 'Enter') handleLogin()
+}
 </script>
 
 <template>
-    <body>
-        <div class="login-container">
-            <div class="login-header">
-                <h2>版本控制管理系统</h2> </div>
+  <div class="login-page">
+    <div class="login-bg">
+      <div class="orb orb-1"></div>
+      <div class="orb orb-2"></div>
+      <div class="orb orb-3"></div>
+    </div>
 
-            <el-form :model="loginForm" :rules="loginRules" ref="loginFormRef" @keyup.enter="handleLogin"> 
-                <el-form-item prop="username">
-                    <el-input v-model="loginForm.username" placeholder="請輸入用戶帳號">
-                        <template #prefix>
-                            <el-icon><User /></el-icon>
-                        </template>
-                    </el-input>
-                </el-form-item>
-
-                <el-form-item prop="password">
-                    <el-input v-model="loginForm.password" placeholder="請輸入密碼" show-password>
-                        <template #prefix>
-                            <el-icon><Lock /></el-icon>
-                        </template>
-                    </el-input>
-                </el-form-item>
-
-                <el-form-item>
-                    <el-row :gutter="24" style="width: 100%;"> <el-col :span="12">
-                            <el-button type="primary" style="width: 100%;" @click="handleLogin" :loading="loading">登入</el-button>
-                        </el-col>
-                        <el-col :span="12">
-                            <el-button type="info" style="width: 100%;" @click="handleClear" :loading="loading">清除</el-button>
-                        </el-col>
-                    </el-row>
-                </el-form-item>
-            </el-form>
-
-            <div class="login-footer">
-                © 2026 版本控制管理系統 - 🤖 版權所有
-            </div>
+    <div class="login-card" @keydown="onKeydown">
+      <div class="brand-area">
+        <div class="brand-logo">
+          <svg viewBox="0 0 32 32" fill="none">
+            <rect width="32" height="32" rx="9" fill="url(#lg)" />
+            <path d="M8 22 L16 10 L24 22" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M11 18 L21 18" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity="0.7" />
+            <defs>
+              <linearGradient id="lg" x1="0" y1="0" x2="32" y2="32">
+                <stop offset="0%" stop-color="#4f46e5" />
+                <stop offset="100%" stop-color="#e11d48" />
+              </linearGradient>
+            </defs>
+          </svg>
         </div>
-    </body>
+        <div>
+          <h1 class="brand-title">版本控制管理系統</h1>
+          <p class="brand-sub">DevOps Platform v2</p>
+        </div>
+      </div>
+
+      <div class="form-body">
+        <div class="field-group" :class="{ 'has-error': errors.username }">
+          <label class="field-label">帳號</label>
+          <div class="input-wrap">
+            <span class="input-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+            </span>
+            <input
+              v-model="loginForm.username"
+              type="text"
+              class="field-input"
+              placeholder="請輸入用戶帳號"
+              autocomplete="username"
+              :disabled="loading"
+            />
+          </div>
+          <span v-if="errors.username" class="field-error">{{ errors.username }}</span>
+        </div>
+
+        <div class="field-group" :class="{ 'has-error': errors.password }">
+          <label class="field-label">密碼</label>
+          <div class="input-wrap">
+            <span class="input-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+            </span>
+            <input
+              v-model="loginForm.password"
+              :type="showPassword ? 'text' : 'password'"
+              class="field-input"
+              placeholder="請輸入密碼"
+              autocomplete="current-password"
+              :disabled="loading"
+            />
+            <button
+              class="eye-btn"
+              type="button"
+              tabindex="-1"
+              @click="showPassword = !showPassword"
+            >
+              <svg v-if="showPassword" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+                <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+                <line x1="1" y1="1" x2="23" y2="23" />
+              </svg>
+              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+            </button>
+          </div>
+          <span v-if="errors.password" class="field-error">{{ errors.password }}</span>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn-login" :disabled="loading" @click="handleLogin">
+            <span v-if="loading" class="btn-spinner"></span>
+            <span>{{ loading ? '登入中...' : '登入' }}</span>
+          </button>
+          <button class="btn-clear" :disabled="loading" @click="handleClear">清除</button>
+        </div>
+      </div>
+
+      <div class="card-footer">© 2026 版本控制管理系統 · All rights reserved</div>
+    </div>
+  </div>
 </template>
 
 <style scoped>
-body {
-    margin: 0;
-    padding: 0;
-    font-family: Arial, sans-serif;
-    /* 【優化】使用 background-image 代替 background url()，並配合 background-size */
-    background-image: url('@/assets/bg.png'); 
-    background-repeat: no-repeat;
-    background-position: center center;
-    background-attachment: fixed; /* 讓背景圖固定不動 */
-    background-size: cover; /* 讓背景圖覆蓋整個區域 */
-    
-    /* 【優化】疊加一個半透明的深色層，增加內容可讀性 */
-    background-color: #333; /* 備用背景色或調整背景圖的底色 */
-    
-    height: 100vh;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    
-    /* 增加一個漸變遮罩層，提升可讀性 */
-    position: relative;
-    z-index: 0; /* 確保 body 在最底層 */
+.login-page {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0d0f1a;
+  overflow: hidden;
+  position: relative;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
-/* 【加強】為 body 添加一個偽元素作為半透明疊加層 */
-body::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.5); /* 黑色半透明疊加層，調整透明度 */
-    z-index: -1; /* 讓疊加層在內容下方，在背景圖上方 */
+.login-bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
 
-
-.login-container {
-    width: 400px;
-    z-index: 10;
-    
-    /* 這裡不再使用傳統白色背景，讓內容由內部的 .el-form 承載玻璃效果 */
-    background: rgba(0, 0, 0, 0.3); /* 輕微深色疊加，增加層次感 */
-    border-radius: 24px;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-    padding: 0; /* 讓 el-form 內部控制內邊距 */
+.orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  animation: drift 12s ease-in-out infinite alternate;
 }
 
-.login-header {
-    text-align: center;
-    padding: 30px 30px 10px 30px; /* 調整內邊距 */
-}
-.login-header h2 {
-    font-size: 26px;
-    font-weight: 700;
-    /* 標題漸層 */
-    background: linear-gradient(to right, #fff, #cbd5e1);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    margin-bottom: 5px;
-}
-.login-header p {
-    color: var(--text-sub);
-    font-size: 14px;
+.orb-1 {
+  width: 480px;
+  height: 480px;
+  top: -160px;
+  left: -120px;
+  background: radial-gradient(circle, rgba(79, 70, 229, 0.3), transparent 65%);
+  animation-delay: 0s;
 }
 
-.login-footer {
-    margin-top: 20px;
-    text-align: center;
-    font-size: 14px;
-    color: #666;
+.orb-2 {
+  width: 360px;
+  height: 360px;
+  bottom: -80px;
+  right: -80px;
+  background: radial-gradient(circle, rgba(225, 29, 72, 0.22), transparent 65%);
+  animation-delay: -4s;
 }
 
-
-
-/* --- Element Plus 表單/輸入框樣式覆蓋  --- */
-/* 1. 調整整個表單容器的外觀 */
-.el-form {
-    padding: 30px;
-    /* 玻璃效果應用在表單本身 */
-    background: var(--glass-bg) !important; 
-    backdrop-filter: blur(12px) !important;
-    border-top: 1px solid var(--glass-border) !important; /* 視覺區隔 */
-    border-radius: 0 0 24px 24px; /* 只有底部圓角 */
+.orb-3 {
+  width: 280px;
+  height: 280px;
+  top: 40%;
+  right: 20%;
+  background: radial-gradient(circle, rgba(129, 140, 248, 0.15), transparent 65%);
+  animation-delay: -8s;
 }
 
-/* 2. 輸入框整體樣式 (Input Wrapper) */
-:deep(.el-input__wrapper) {
-    background-color: rgba(0, 0, 0, 0.2) !important; 
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15) inset !important; 
-    border-radius: 12px !important; 
-    padding: 10px 15px !important; 
-    transition: all 0.3s ease;
+.login-card {
+  position: relative;
+  z-index: 10;
+  width: 420px;
+  max-width: calc(100vw - 40px);
+  border-radius: 20px;
+  border: 1px solid rgba(129, 140, 248, 0.15);
+  background: rgba(19, 22, 42, 0.88);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 24px 64px #00000080, 0 0 0 1px #ffffff0a inset;
+  overflow: hidden;
+  animation: card-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
-/* 3. 輸入框聚焦 (Focus) 時的樣式 */
-:deep(.el-input__wrapper.is-focus) {
-    box-shadow: 0 0 0 2px var(--primary-color, #6366f1) inset, 
-                0 0 15px rgba(8, 11, 228, 0.4) !important; 
+.brand-area {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 28px 28px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-/* 4. 調整輸入框內的文字和圖標顏色 */
-:deep(.el-input__inner) {
-    color: var(--text-main, #f4f1f9) !important; /* 文字顏色為淺色 */
-    font-size: 16px !important;
+.brand-logo svg {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: block;
+  filter: drop-shadow(0 4px 12px rgba(79, 70, 229, 0.4));
 }
 
-/* 5. 調整輸入框的 Icon 顏色 */
-:deep(.el-input__prefix) {
-    color: var(--text-sub, #94a3b8) !important; /* 圖標顏色為柔和的灰色 */
-    font-size: 28px;
-    margin-right: 15px; /* 調整圖標與文字的間距 */
+.brand-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #e8e9f3;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
 }
 
-
-/* 6. 按鈕樣式 (使用前一輪定義的漸層風格) */
-
-/* 登入按鈕 (Primary - 漸層發光) */
-:deep(.el-button--primary) {
-    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%) !important;
-    border: none !important;
-    box-shadow: 0 4px 14px 0 rgba(99, 102, 241, 0.39) !important;
-    font-weight: 600;
-    height: 48px; 
-}
-:deep(.el-button--primary:hover) { transform: translateY(4px); opacity: 0.8; }
-
-
-/* 清除按鈕 (Info - 玻璃風格) */
-:deep(.el-button--info) {
-    background: rgba(255, 255, 255, 0.1) !important;
-    border: 1px solid rgba(255, 255, 255, 0.2) !important;
-    color: #fff !important;
-    transition: all 0.3s ease !important;
-    height: 48px;
+.brand-sub {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: #6b7a99;
+  letter-spacing: 0.04em;
 }
 
-:deep(.el-button--info:hover) {
-    background: rgba(255, 255, 255, 0.2) !important;
-    transform: translateY(4px); opacity: 0.8;
+.form-body {
+  padding: 24px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
 }
 
-/* --- 頁面底部 --- */
-.login-footer {
-    padding: 0px 0px;
-    font-size: 15px;
-    color: rgba(255, 255, 255, 0.999);
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
+.field-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #8b8fa8;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
 
+.input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-icon {
+  position: absolute;
+  left: 14px;
+  color: #4a4e68;
+  display: flex;
+  pointer-events: none;
+  transition: color 0.2s;
+}
+
+.input-icon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.field-input {
+  width: 100%;
+  padding: 12px 44px 12px 44px;
+  border-radius: 11px;
+  border: 1px solid rgba(129, 140, 248, 0.15);
+  background: rgba(255, 255, 255, 0.04);
+  color: #e8e9f3;
+  font-size: 15px;
+  font-family: inherit;
+  outline: none;
+  transition: all 0.2s ease;
+  -webkit-font-smoothing: antialiased;
+}
+
+.field-input::placeholder {
+  color: #4a4e68;
+}
+
+.field-input:focus {
+  border-color: #818cf8;
+  background: rgba(129, 140, 248, 0.06);
+  box-shadow: 0 0 0 3px #818cf81f;
+}
+
+.field-input:focus ~ .input-icon,
+.input-wrap:focus-within .input-icon {
+  color: #818cf8;
+}
+
+.field-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.has-error .field-input {
+  border-color: #f8717180;
+}
+
+.has-error .field-input:focus {
+  box-shadow: 0 0 0 3px #f871711f;
+}
+
+.field-error {
+  font-size: 12px;
+  color: #f87171;
+  padding-left: 2px;
+  animation: shake 0.3s ease;
+}
+
+.eye-btn {
+  position: absolute;
+  right: 12px;
+  background: none;
+  border: none;
+  color: #4a4e68;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  transition: color 0.2s;
+  border-radius: 5px;
+}
+
+.eye-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.eye-btn:hover {
+  color: #818cf8;
+  background: rgba(129, 140, 248, 0.1);
+}
+
+.btn-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.btn-login {
+  flex: 1;
+  padding: 13px 0;
+  border-radius: 11px;
+  border: none;
+  background: linear-gradient(135deg, #4f46e5, #818cf8);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 16px #4f46e559;
+  letter-spacing: 0.02em;
+}
+
+.btn-login:hover:not(:disabled) {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px #4f46e573;
+}
+
+.btn-login:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn-login:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+.btn-clear {
+  padding: 13px 22px;
+  border-radius: 11px;
+  border: 1px solid rgba(129, 140, 248, 0.2);
+  background: rgba(255, 255, 255, 0.04);
+  color: #8b8fa8;
+  font-size: 15px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.btn-clear:hover:not(:disabled) {
+  border-color: #818cf866;
+  color: #818cf8;
+  background: rgba(129, 140, 248, 0.06);
+}
+
+.btn-clear:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.card-footer {
+  padding: 14px 28px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 12px;
+  color: #4a4e68;
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+
+@keyframes drift {
+  0% { transform: translate(0) scale(1); }
+  100% { transform: translate(30px, 20px) scale(1.05); }
+}
+
+@keyframes card-in {
+  0% { opacity: 0; transform: translateY(24px) scale(0.97); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translate(0); }
+  25% { transform: translate(-4px); }
+  75% { transform: translate(4px); }
+}
+
+@keyframes spin {
+  0% { transform: rotate(0); }
+  100% { transform: rotate(360deg); }
+}
 </style>

@@ -1,0 +1,48 @@
+@charset "UTF-8";.homepage-dashboard { padding:20px;display:flex;flex-direction:column;gap:20px }
+.h-full { height:100% }
+.welcome-card { height:250px;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--border-color);overflow:hidden }
+.card-content { display:flex;justify-content:space-between;align-items:center;flex:1;height:auto }
+.text-area { flex:2;padding-right:30px }
+.image-area { flex:1;display:flex;flex-direction:column;justify-content:center;align-items:flex-end;gap:10px }
+.dashboard-img { max-width:100%;height:auto;max-height:200px;border-radius:var(--radius);opacity:.85 }
+.bg-carousel { position:relative;width:240px;height:150px;border-radius:var(--radius);overflow:hidden;border:1px solid var(--border-color);box-shadow:0 10px 30px #00000026;background:var(--panel) }
+.carousel-img { position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.92;transform:scale(1.02) }
+.carousel-fade-enter-active[data-v-e39cfd78],.carousel-fade-leave-active { transition:opacity .45s ease,transform .45s ease }
+.carousel-fade-enter-from[data-v-e39cfd78],.carousel-fade-leave-to { opacity:0;transform:scale(1.03) }
+.carousel-fade-enter-to[data-v-e39cfd78],.carousel-fade-leave-from { opacity:1;transform:scale(1.02) }
+.bg-caption { margin:0;max-width:240px;font-size:12px;line-height:1.4;color:var(--muted);padding:0 4px }
+.carousel-dots { position:absolute;top:10px;right:10px;display:flex;gap:6px }
+.dot { width:8px;height:8px;border-radius:999px;background:rgba(255,255,255,.35);border:1px solid rgba(255,255,255,.25) }
+.dot.active { background:rgba(255,255,255,.95);border-color:#fffffff2 }
+.welcome-title { font-size:28px;margin-top:0;color:var(--text) }
+.welcome-subtitle { color:var(--muted);line-height:1.6;max-width:800px }
+.quick-actions { margin-top:20px }
+.stat-row { margin-bottom:0 }
+.stat-card { height:100px;transition:all .3s ease;border:1px solid var(--border-color);background:var(--panel) }
+.stat-box { display:flex;align-items:center }
+.stat-icon { font-size:28px;padding:12px;border-radius:8px;margin-right:15px;min-width:28px }
+.stat-info { display:flex;flex-direction:column }
+.stat-title { margin:0;font-size:14px;color:var(--muted) }
+.stat-value { margin:5px 0 0;font-size:24px;font-weight:700 }
+.content-row { display:flex;align-items:stretch }
+.release-card[data-v-e39cfd78],.activity-card { background:var(--panel);border:1px solid var(--border-color);display:flex;flex-direction:column }
+.card-header { display:flex;justify-content:space-between;align-items:center }
+.header-title { display:flex;align-items:center;font-size:16px;font-weight:600;color:var(--text) }
+.header-icon { margin-right:8px;color:var(--primary-color) }
+.release-content-box { height:400px;overflow-y:auto;padding:15px;background:var(--table-hover-bg);border-radius:8px;border:1px solid var(--border-color) }
+.activity-box { height:360px;overflow-y:auto;padding-right:10px }
+.activity-text { color:var(--text);font-size:14px }
+.card-footer { margin-top:auto;text-align:center;padding-top:10px }
+.mr-section { margin-top:20px;padding:15px;background:rgba(255,255,255,.05);border-radius:8px;border:1px solid var(--border-color) }
+.mr-section-head { display:flex;justify-content:space-between;align-items:center;margin-bottom:12px }
+.mr-section-title { margin:0;font-size:16px;font-weight:700;color:#60a5fa!important;display:flex;align-items:center }
+.mr-review-summary { margin:8px 0 0;font-size:13px;color:var(--el-text-color-secondary);line-height:1.5 }
+.mr-item-header { display:flex;align-items:center;gap:8px;flex-wrap:wrap }
+.mr-item { background:var(--panel);border:1px solid var(--border-color);padding:12px;margin-bottom:10px;border-radius:6px }
+.mr-title { color:#e5e7eb!important;font-weight:500;font-size:14px }
+.mr-iid { color:#fb7185;font-weight:700;margin-right:8px }
+.mr-item-footer { margin-top:8px;display:flex;justify-content:space-between;color:#9ca3af!important;font-size:12px }
+.mr-author { color:#fbbf24;font-weight:700 }
+.mr-detail-list { padding:5px 0 }
+.mr-detail-item { display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border-color) }
+.detail-name { font-size:13px;color:var(--text);font-weight:500 }

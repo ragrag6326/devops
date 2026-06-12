@@ -100,10 +100,14 @@ onMounted (() => {
 </script>
 
 <template>
-    <h1>歷史紀錄查詢</h1>
+    <div class="mr-history-page">
+    <div class="page-header">
+        <h1 class="page-title">歷史紀錄查詢</h1>
+        <p class="page-subtitle">查詢 GitLab Merge Request 合併與關聯版號紀錄</p>
+    </div>
 
     <!-- 搜索欄 -->
-    <div id="container">
+    <div class="search-toolbar">
 
         <el-form :inline="true" :model="searchForm" class="demo-form-inline">
             
@@ -134,8 +138,8 @@ onMounted (() => {
             </el-form-item>
 
             <el-form-item>
-                <el-button el-button type="primary" @click="search">查詢</el-button>
-                <el-button el-button type="info" @click="clear">清空</el-button>
+                <el-button type="primary" @click="search">查詢</el-button>
+                <el-button type="info" @click="clear">清空</el-button>
             </el-form-item>
         </el-form>
     </div>
@@ -143,39 +147,38 @@ onMounted (() => {
     
     <!-- 數據表格顯示 -->
     <div class="table-container">
-         <el-table :data="mrList" border style="width:100%" v-loading="loading">
-            <!-- <el-table-column type="selection" width="35" align="center" /> -->
-                <el-table-column prop="iid" label="MR流水號" width="90"/>
-                <el-table-column prop="projectName" label="專案名稱" min-width="90" show-overflow-tooltip />
-                <el-table-column prop="title" label="標題" min-width="240" show-overflow-tooltip />
-                <el-table-column prop="authorName" label="作者" width="80"/>
-                <el-table-column prop="mergedBy" label="合併人" width="80"/>
-                <el-table-column prop="state" label="狀態" width="90">
+         <el-table :data="mrList" border style="width:100%" table-layout="auto" v-loading="loading">
+                <el-table-column prop="iid" label="MR流水號" min-width="90" align="center"/>
+                <el-table-column prop="projectName" label="專案名稱" min-width="110" show-overflow-tooltip />
+                <el-table-column prop="title" label="標題" min-width="220" show-overflow-tooltip />
+                <el-table-column prop="authorName" label="作者" min-width="90"/>
+                <el-table-column prop="mergedBy" label="合併人" min-width="90"/>
+                <el-table-column prop="state" label="狀態" min-width="100">
                     <template #default="scope">
                         <el-tag :type="scope.row.state === 'merged' ? 'success' : scope.row.state === 'opened' ? 'warning' : 'danger'">
                         {{ scope.row.state }}
                         </el-tag>
                     </template>
                 </el-table-column>
-                <el-table-column label="分支" width="240">
+                <el-table-column label="分支" min-width="200" show-overflow-tooltip>
                     <template #default="r">
-                        <b>{{ r.row.sourceBranch }}</b> → <b>{{ r.row.targetBranch }}</b>
+                        <span class="branch-text"><b>{{ r.row.sourceBranch }}</b> → <b>{{ r.row.targetBranch }}</b></span>
                     </template>
                 </el-table-column>
-                <el-table-column prop="versionProd" label="PROD關聯版號" width="90">
+                <el-table-column prop="versionProd" label="PROD關聯版號" min-width="120">
                     <template #default="scope">
                         <el-tag :type="scope.row.versionProd != null ? 'success' : (scope.row.state == null ? 'warning' : 'danger')"> {{ scope.row.versionProd || '未關聯' }} </el-tag>
                     </template>
                 </el-table-column>
                 
-                <el-table-column prop="versionDev" label="DEV關聯版號" width="90">
+                <el-table-column prop="versionDev" label="DEV關聯版號" min-width="120">
                     <template #default="scope">
                         <el-tag :type="scope.row.versionDev != null ? 'success' : (scope.row.state == null ? 'warning' : 'danger')"> {{ scope.row.versionDev || '未關聯' }} </el-tag>
                     </template>
                 </el-table-column>
 
-                <el-table-column prop="mergedAt" label="合併時間" width="160"/>
-                <el-table-column prop="createdAt" label="建立時間" width="160"/>
+                <el-table-column prop="mergedAt" label="合併時間" min-width="160" show-overflow-tooltip />
+                <el-table-column prop="createdAt" label="建立時間" min-width="160" show-overflow-tooltip />
                 
         </el-table>
         <br>
@@ -196,14 +199,40 @@ onMounted (() => {
         />
     </div>
 
-
+    </div>
 </template>
 
 <style scoped>
 
-.container{
-    margin: 10px 0px;
+.mr-history-page {
+  padding: 0 4px;
+}
 
+.page-header {
+  margin-bottom: 20px;
+}
+
+.page-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 4px;
+}
+
+.page-subtitle {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0;
+}
+
+.search-toolbar {
+  margin: 10px 0 0;
+}
+
+.branch-text {
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: nowrap;
 }
 
 
@@ -212,19 +241,21 @@ onMounted (() => {
 /* =============================== */
 /* template 中使用了 .table-container 包裹 el-table */
 .table-container {
-    /* 確保容器使用主題面板背景色，以消除白色殘留 */
-    /* background-color: var(--panel, #1e293b);  */
     border-radius: 15px;
-    padding: 0; /* 清除內部額外間距 */
-    overflow: hidden;
+    padding: 0;
+    overflow-x: auto;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
-    margin-top: 20px; /* 給頂部按鈕留出空間 */
+    margin-top: 20px;
+    max-width: 1500px;
+    width: 95%;
+    margin-left: auto;
+    margin-right: auto;
+}
 
-    /* <--- 設定最大寬度，您可以根據需要調整這個值 (例如 1000px, 1400px) */
-    max-width: 1500px; /* 設定您覺得舒適的最大寬度 */
-    width: 95%;       /* 確保在小螢幕下佔滿 */
-    margin-left: auto;   /* <--- 讓左邊自動填滿空間 */
-    margin-right: auto;  /* <--- 讓右邊自動填滿空間，實現水平居中 */
+:deep(.table-container .el-table) {
+    font-size: 13px;
+    line-height: 1.6;
+    min-width: 1300px;
 }
 
 /* 核心：覆蓋 Element Plus 表格的 CSS 變量，採用低飽和度色彩 */
@@ -261,6 +292,7 @@ onMounted (() => {
 :deep(.el-table td.el-table__cell) {
     background-color: var(--table-bg-color) !important;
     border-bottom: 1px solid var(--table-border-color) !important;
+    padding: 10px 12px !important;
 }
 
 /* 調整空數據提示文字的顏色 */

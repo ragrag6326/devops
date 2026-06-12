@@ -5,7 +5,12 @@ import { AnsiUp } from 'ansi_up';
 import { queryVersionPage , queryVersionById , deleteVersionById  , edit , getLatestSuccessVersion , getNextVersion , checkDeployable , updateJenkinsBuildId} from "@/api/version";
 import { triggerJenkinsBuild , getJenkinsConsoleLog , getJenkinsPiplineNumber } from "@/api/jenkins";
 import { deploying } from "@/api/deploy";
-import { getImageVersion , renewimage } from "@/api/monitor";
+import {
+  getImageVersionByType,
+  getRollBackImageVersion,
+  renewimage,
+  deleteImage
+} from "@/api/monitor";
 
 import { ElMessage , ElMessageBox , ElLoading, sliderContextKey } from 'element-plus'
 import axios from 'axios';
@@ -85,7 +90,7 @@ watch(() => rollbackForm.value.projectName, async (newVal) => {
 
     try {
         // 發送 PATCH 請求
-        const res = await getImageVersion(newVal);
+        const res = await getRollBackImageVersion(newVal);
         
         if (res.code === 1) {
             rollbackData.value = res.data; // 將回傳的陣列存入
@@ -149,7 +154,7 @@ const submitRollback = async () => {
             if (res.code === 1) {
                 ElMessage.success("指令發送成功！");
                 rollbackDialogVisible.value = false;
-                // search(); // 如果需要刷新列表可呼叫
+                fetchLiveVersions();
             } else {
                 ElMessage.error(res.msg || "更新失敗");
             }
@@ -162,6 +167,200 @@ const submitRollback = async () => {
 };
 
 // -------------------------------------------
+
+// --- 目前機器版本看板 ---
+const NODE_SUFFIXES = ['backup', 'prod', 'dev', 'local']
+const NODE_ORDER = { prod: 0, backup: 1, dev: 2, local: 3 }
+
+const parseImageLine = (line) => {
+  const colon = line.lastIndexOf(':')
+  if (colon === -1) {
+    return { projectName: line, nodeType: null, version: '未知', raw: line, fullString: line }
+  }
+  const raw = line.slice(0, colon)
+  const version = line.slice(colon + 1)
+  let projectName = raw
+  let nodeType = null
+  for (const suffix of NODE_SUFFIXES) {
+    if (raw.endsWith(`-${suffix}`)) {
+      projectName = raw.slice(0, -(suffix.length + 1))
+      nodeType = suffix
+      break
+    }
+  }
+  return { projectName, nodeType, version, raw, fullString: line }
+}
+
+const liveImageLines = ref([])
+const liveImageSet = ref(new Set())
+const liveLoading = ref(false)
+
+const groupedLiveProjects = computed(() => {
+  const map = {}
+  liveImageLines.value.forEach((item) => {
+    if (!map[item.projectName]) {
+      map[item.projectName] = { projectName: item.projectName, nodes: [] }
+    }
+    map[item.projectName].nodes.push({
+      nodeType: item.nodeType,
+      version: item.version,
+      raw: item.raw
+    })
+  })
+  return Object.values(map).map((proj) => ({
+    ...proj,
+    nodes: proj.nodes.slice().sort(
+      (a, b) => (NODE_ORDER[a.nodeType] ?? 9) - (NODE_ORDER[b.nodeType] ?? 9)
+    )
+  }))
+})
+
+const nodeTypeLabel = (type) => {
+  const map = { prod: '正式', backup: '備援', dev: '通用', local: '通用' }
+  return map[type] || '通用'
+}
+
+const chipClass = (type) => {
+  if (type === 'prod') return 'chip-prod'
+  if (type === 'backup') return 'chip-backup'
+  if (type === 'dev') return 'chip-dev'
+  if (type === 'local') return 'chip-local'
+  return 'chip-none'
+}
+
+const fetchLiveVersions = async () => {
+  liveLoading.value = true
+  try {
+    const res = await getImageVersionByType('current')
+    if (res.code === 1 && Array.isArray(res.data)) {
+      liveImageLines.value = res.data.map(parseImageLine)
+      liveImageSet.value = new Set(res.data)
+    } else {
+      ElMessage.warning(res.msg || '取得版本資訊失敗')
+    }
+  } catch {
+    ElMessage.error('無法連線後端，請確認伺服器狀態')
+  } finally {
+    liveLoading.value = false
+  }
+}
+
+// --- 移除 Image ---
+const FRONTEND_IMAGE_PROJECTS = ['go_nuxt']
+const BACKEND_IMAGE_PROJECTS = ['tkbgoapi', 'tkbtv', 'form-service']
+
+const removeDialogVisible = ref(false)
+const removeCategory = ref('')
+const historyImageLines = ref([])
+const removeListLoading = ref(false)
+const selectedImageVersions = ref([])
+const removeSubmitting = ref(false)
+
+const removeNodeTagClass = (nodeType) => {
+  if (nodeType === 'prod') return 'rn-prod'
+  if (nodeType === 'backup') return 'rn-backup'
+  if (nodeType === 'dev') return 'rn-dev'
+  if (nodeType === 'local') return 'rn-local'
+  return 'rn-dev'
+}
+
+const filteredHistoryImages = computed(() => {
+  if (!removeCategory.value || historyImageLines.value.length === 0) return []
+  const allowed = new Set(
+    removeCategory.value === 'frontend' ? FRONTEND_IMAGE_PROJECTS : BACKEND_IMAGE_PROJECTS
+  )
+  return historyImageLines.value
+    .map((line) => ({ ...parseImageLine(line), isCurrent: liveImageSet.value.has(line) }))
+    .filter((item) => allowed.has(item.projectName))
+    .sort((a, b) => {
+      if (a.projectName !== b.projectName) return a.projectName.localeCompare(b.projectName)
+      return (NODE_ORDER[a.nodeType] ?? 9) - (NODE_ORDER[b.nodeType] ?? 9)
+    })
+})
+
+const handleOpenRemoveImage = () => {
+  removeDialogVisible.value = true
+  removeCategory.value = ''
+  historyImageLines.value = []
+  selectedImageVersions.value = []
+}
+
+watch(() => removeCategory.value, async (category) => {
+  if (!category) return
+  selectedImageVersions.value = []
+  historyImageLines.value = []
+  removeListLoading.value = true
+  try {
+    const res = await getImageVersionByType('history')
+    if (res.code === 1 && Array.isArray(res.data)) {
+      historyImageLines.value = res.data
+    } else {
+      ElMessage.warning(res.msg || '取得歷史版本失敗')
+    }
+  } catch {
+    ElMessage.error('取得歷史版本時發生錯誤')
+  } finally {
+    removeListLoading.value = false
+  }
+})
+
+const buildRemoveImagePath = (version) => {
+  const prefix = removeCategory.value === 'frontend' ? 'frontend-prod' : 'backend-prod'
+  return `${prefix}/${version}`
+}
+
+const isDeleteSuccess = (res) => res?.data === '刪除成功'
+
+const toggleImageSelection = (version, isCurrent) => {
+  if (isCurrent) return
+  const idx = selectedImageVersions.value.indexOf(version)
+  if (idx >= 0) selectedImageVersions.value.splice(idx, 1)
+  else selectedImageVersions.value.push(version)
+}
+
+const submitRemoveImages = async () => {
+  if (selectedImageVersions.value.length === 0) {
+    ElMessage.warning('請至少勾選一個版號')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      `確定要永久移除 ${selectedImageVersions.value.length} 個 Image？此操作不可逆，請謹慎確認。`,
+      '確認移除 Image',
+      { type: 'warning', confirmButtonText: '確認移除', cancelButtonText: '取消', customClass: 'glass-confirm' }
+    )
+  } catch {
+    return
+  }
+
+  removeSubmitting.value = true
+  let successCount = 0
+  const failures = []
+  for (const version of selectedImageVersions.value) {
+    const imagePath = buildRemoveImagePath(version)
+    try {
+      const res = await deleteImage(imagePath)
+      if (isDeleteSuccess(res)) successCount++
+      else failures.push({ name: version, reason: res?.data || res?.msg || '未知錯誤' })
+    } catch {
+      failures.push({ name: version, reason: '網路或伺服器錯誤' })
+    }
+  }
+  removeSubmitting.value = false
+
+  if (successCount > 0) ElMessage.success(`成功移除 ${successCount} 個 Image`)
+  if (failures.length > 0) {
+    failures.forEach(({ name, reason }) => {
+      ElMessage.error({ message: `移除失敗：${name}（${reason}）`, duration: 5000 })
+    })
+    const res = await getImageVersionByType('history').catch(() => null)
+    if (res?.code === 1 && Array.isArray(res.data)) historyImageLines.value = res.data
+    selectedImageVersions.value = []
+  } else {
+    removeDialogVisible.value = false
+    fetchLiveVersions()
+  }
+}
 
 // 搜索欄
 const projectNameOptions = [
@@ -1011,14 +1210,93 @@ const getToken = () => {
 
 onMounted (() => {
     search();
-    getToken();  // 獲取 token
+    getToken();
+    fetchLiveVersions();
 })
 
 
 </script>
 
 <template>
-    <h1>版本歷史紀錄查詢</h1>
+    <div class="version-history-page">
+    <div class="page-header">
+        <div>
+            <h1 class="page-title-main">版本歷史查詢</h1>
+            <p class="page-subtitle">查詢各專案部署紀錄，並即時掌握後端容器 image 版本（4 服務 · 5 節點）</p>
+        </div>
+        <button class="refresh-live-btn" :disabled="liveLoading" @click="fetchLiveVersions">
+            <svg :class="{ 'spin-icon': liveLoading }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <polyline points="23 4 23 10 17 10" />
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+            </svg>
+            重新整理
+        </button>
+    </div>
+
+    <div class="live-version-board">
+        <div class="lvb-header">
+            <div class="lvb-title-wrap">
+                <span class="live-dot"></span>
+                <span class="lvb-title">目前機器版本</span>
+                <span class="lvb-source">backend image</span>
+                <span v-if="groupedLiveProjects.length" class="lvb-count">{{ groupedLiveProjects.length }} 專案</span>
+            </div>
+            <div class="lvb-actions">
+                <button class="lvb-action-btn rollback-btn" @click="handleOpenRollback">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                        <polyline points="1 4 1 10 7 10" />
+                        <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                    </svg>
+                    退版
+                </button>
+                <button class="lvb-action-btn remove-btn" title="移除 Image" @click="handleOpenRemoveImage">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                        <path d="M10 11v6" />
+                        <path d="M14 11v6" />
+                        <path d="M9 6V4h6v2" />
+                    </svg>
+                    <span>移除 Image</span>
+                </button>
+            </div>
+        </div>
+
+        <div v-if="liveLoading" class="lvb-loading">
+            <span class="lvb-spinner"></span>
+            讀取中...
+        </div>
+        <div v-else-if="!groupedLiveProjects.length" class="lvb-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            尚無版本資料
+        </div>
+        <div v-else class="lvb-grid">
+            <div v-for="proj in groupedLiveProjects" :key="proj.projectName" class="lvb-project-card">
+                <div class="lvb-proj-name">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                    </svg>
+                    {{ proj.projectName }}
+                </div>
+                <div class="lvb-nodes">
+                    <span
+                        v-for="node in proj.nodes"
+                        :key="node.raw"
+                        class="lvb-node-chip"
+                        :class="chipClass(node.nodeType)"
+                    >
+                        <span class="chip-node-label">{{ nodeTypeLabel(node.nodeType) }}</span>
+                        <span class="chip-divider"></span>
+                        <span class="chip-version">{{ node.version }}</span>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- 搜索欄 -->
     <div id="container">
@@ -1052,24 +1330,20 @@ onMounted (() => {
         <el-button el-button type="primary" @click="InitAddForm">新增版號</el-button>
         <el-button el-button type="danger" :disabled="multipleSelection.length === 0" @click="handleBatchDelete"> 批量刪除</el-button>
 
-        <el-button type="warning" @click="handleOpenRollback">
-            <el-icon><RefreshLeft /></el-icon> 版本退版 (Rollback)
-        </el-button>
-
     </div>
 
     
     <!-- 數據表格顯示 -->
     <div class="table-container">
         
-        <el-table :data="versionList" border style="width:100%" v-loading="loading" @selection-change="handleSelectionChange">
+        <el-table :data="versionList" border style="width:100%" table-layout="auto" v-loading="loading" @selection-change="handleSelectionChange">
                 
-                <el-table-column type="selection" width="35" align="center" />
-                <el-table-column prop="id" label="編號" min-width="20"/>
-                <el-table-column prop="projectName" label="專案名稱" min-width="30" show-overflow-tooltip />
-                <el-table-column prop="projectEnv" label="環境" min-width="30" />
+                <el-table-column type="selection" width="50" align="center" />
+                <el-table-column prop="id" label="編號" min-width="60"/>
+                <el-table-column prop="projectName" label="專案名稱" min-width="110" show-overflow-tooltip />
+                <el-table-column prop="projectEnv" label="環境" min-width="80" />
           
-                <el-table-column prop="nodeType" label="節點" min-width="30">
+                <el-table-column prop="nodeType" label="節點" min-width="90">
                     <template #default="scope">
                         <el-tag 
                         :color="customStyles[scope.row.nodeType]?.bg" 
@@ -1081,26 +1355,25 @@ onMounted (() => {
                     </template>
                 </el-table-column>
 
-                <el-table-column prop="version" label="版本" min-width="30"/>
-                <el-table-column prop="state" label="狀態" min-width="35">
+                <el-table-column prop="version" label="版本" min-width="90"/>
+                <el-table-column prop="state" label="狀態" min-width="90">
                     <template #default="scope">
                         <el-tag :type="scope.row.state === 1 ? 'success' : scope.row.state === 2 ? 'danger' : 'warning' ">
                             {{ stateOptions.find(s => s.value === scope.row.state)?.label || "未知" }}
                         </el-tag>
                     </template>
                 </el-table-column>
-                <el-table-column prop="remark" label="備註" min-width="50"/>
-                <el-table-column prop="createdTime" label="建立時間" min-width="60"/>
-                <!-- <el-table-column prop="updatedTime" label="更新時間" min-width="60" /> -->
+                <el-table-column prop="remark" label="備註" min-width="120" show-overflow-tooltip />
+                <el-table-column prop="createdTime" label="建立時間" min-width="160" show-overflow-tooltip />
 
-                <el-table-column label="操作" min-width="60" >
+                <el-table-column label="操作" min-width="180" show-overflow-tooltip>
                     <template #default="scope">
                         <el-button type="primary"  @click="handleEdit(scope.row)"> <el-icon><EditPen /></el-icon>  &nbsp; 編輯</el-button>
                         <el-button type="danger"  @click="handleDelete(scope.row)"><el-icon><Delete /></el-icon> &nbsp; 刪除</el-button>
                     </template>
                 </el-table-column>
 
-                <el-table-column label="查看jenkins操作日誌" min-width="35" align="center">
+                <el-table-column label="查看jenkins操作日誌" min-width="120" align="center">
                     <template #default="scope">
                         <el-tooltip content="查看建置日誌" placement="top">
                             
@@ -1194,6 +1467,105 @@ onMounted (() => {
                 :disabled="!rollbackForm.version"
             >
                 執行退版
+            </el-button>
+        </template>
+    </el-dialog>
+
+    <!-- 移除 Image dialog -->
+    <el-dialog v-model="removeDialogVisible" title="移除 Image" width="560px" class="remove-image-dialog">
+        <div class="ri-steps">
+            <span class="ri-step active">1. 選擇類別</span>
+            <span class="ri-step-arrow">→</span>
+            <span class="ri-step" :class="{ active: !!removeCategory }">2. 勾選版本</span>
+            <span class="ri-step-arrow">→</span>
+            <span class="ri-step" :class="{ active: selectedImageVersions.length > 0 }">3. 確認移除</span>
+        </div>
+
+        <div class="ri-category-row">
+            <button
+                type="button"
+                class="ri-cat-btn"
+                :class="{ selected: removeCategory === 'frontend' }"
+                @click="removeCategory = 'frontend'"
+            >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                <span>前端 Image</span>
+                <small>frontend-prod</small>
+            </button>
+            <button
+                type="button"
+                class="ri-cat-btn"
+                :class="{ selected: removeCategory === 'backend' }"
+                @click="removeCategory = 'backend'"
+            >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+                <span>後端 Image</span>
+                <small>backend-prod</small>
+            </button>
+        </div>
+
+        <div v-if="removeCategory" class="ri-list-wrap">
+            <div class="ri-list-header">
+                <span>歷史 Image 清單</span>
+                <span v-if="selectedImageVersions.length" class="ri-sel-count">已選 {{ selectedImageVersions.length }} 項</span>
+            </div>
+
+            <div v-if="removeListLoading" class="ri-loading">
+                <span class="ri-spinner"></span>
+                讀取歷史版本中...
+            </div>
+            <div v-else-if="!filteredHistoryImages.length" class="ri-empty">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/></svg>
+                此類別尚無可移除的歷史 Image
+            </div>
+            <div v-else class="ri-list">
+                <label
+                    v-for="item in filteredHistoryImages"
+                    :key="item.fullString"
+                    class="ri-item"
+                    :class="{ 'is-current': item.isCurrent, 'is-selected': selectedImageVersions.includes(item.version) }"
+                    @click.prevent="toggleImageSelection(item.version, item.isCurrent)"
+                >
+                    <input
+                        type="checkbox"
+                        class="ri-checkbox"
+                        :value="item.version"
+                        :checked="selectedImageVersions.includes(item.version)"
+                        :disabled="item.isCurrent"
+                        @click.stop
+                        @change="toggleImageSelection(item.version, item.isCurrent)"
+                    />
+                    <div class="ri-item-body">
+                        <div class="ri-item-top">
+                            <span class="ri-proj">{{ item.projectName }}</span>
+                            <span class="ri-node-tag" :class="removeNodeTagClass(item.nodeType)">
+                                {{ nodeTypeLabel(item.nodeType) }}
+                            </span>
+                            <span v-if="item.isCurrent" class="ri-in-use-badge">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                                使用中
+                            </span>
+                        </div>
+                        <code class="ri-ver">{{ item.fullString }}</code>
+                    </div>
+                </label>
+            </div>
+
+            <div v-if="selectedImageVersions.length" class="ri-warning">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                <span>將永久刪除 <strong>{{ selectedImageVersions.length }}</strong> 個 Image，此操作<strong>無法復原</strong></span>
+            </div>
+        </div>
+
+        <template #footer>
+            <el-button @click="removeDialogVisible = false">取消</el-button>
+            <el-button
+                type="danger"
+                :loading="removeSubmitting"
+                :disabled="!selectedImageVersions.length"
+                @click="submitRemoveImages"
+            >
+                確認移除
             </el-button>
         </template>
     </el-dialog>
@@ -1315,9 +1687,459 @@ onMounted (() => {
         </div>
     </el-dialog>
 
+    </div>
 </template>
 
 <style scoped>
+.version-history-page {
+  padding: 0 4px;
+}
+
+.page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.page-title-main {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 4px;
+  letter-spacing: -0.02em;
+}
+
+.page-subtitle {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0;
+}
+
+.refresh-live-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 16px;
+  border-radius: 9px;
+  border: 1px solid var(--border-color);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.refresh-live-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.refresh-live-btn:hover:not(:disabled) {
+  border-color: var(--brand);
+  color: var(--brand);
+  background: var(--brand-muted);
+}
+
+.refresh-live-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.spin-icon {
+  animation: spin-live 1s linear infinite;
+}
+
+.live-version-board {
+  background: var(--panel);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 16px 20px 20px;
+  margin-bottom: 24px;
+  box-shadow: var(--shadow);
+}
+
+.lvb-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.lvb-title-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lvb-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.lvb-source {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 2px 8px;
+  background: var(--panel-alt);
+  border: 1px solid var(--border-color);
+  border-radius: 99px;
+}
+
+.lvb-count {
+  font-size: 12px;
+  color: var(--muted);
+  margin-left: 4px;
+}
+
+.lvb-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lvb-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 13px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--panel-alt);
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.lvb-action-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.rollback-btn {
+  color: #d97706;
+  border-color: color-mix(in srgb, #f59e0b 30%, transparent);
+  background: color-mix(in srgb, #f59e0b 8%, transparent);
+}
+
+.rollback-btn:hover {
+  background: color-mix(in srgb, #f59e0b 14%, transparent);
+  border-color: #f59e0b;
+}
+
+.remove-btn {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 30%, transparent);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+}
+
+.remove-btn:hover {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  border-color: var(--danger);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--danger) 20%, transparent);
+}
+
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 25%, transparent);
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.lvb-loading,
+.lvb-empty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 13px;
+  padding: 8px 0;
+}
+
+.lvb-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--brand);
+  border-radius: 50%;
+  animation: spin-live 0.75s linear infinite;
+}
+
+.lvb-empty svg {
+  width: 18px;
+  height: 18px;
+  opacity: 0.55;
+}
+
+.lvb-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.lvb-project-card {
+  background: var(--panel-alt);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 12px 14px;
+  flex: 0 0 auto;
+  min-width: 180px;
+  max-width: 280px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.lvb-project-card:hover {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-muted);
+}
+
+.lvb-proj-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 10px;
+}
+
+.lvb-proj-name svg {
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+}
+
+.lvb-nodes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.lvb-node-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  overflow: hidden;
+  border: 1px solid transparent;
+}
+
+.chip-node-label {
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.chip-divider {
+  width: 1px;
+  align-self: stretch;
+  background: currentColor;
+  opacity: 0.2;
+}
+
+.chip-version {
+  padding: 4px 9px;
+  font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.chip-prod {
+  background: color-mix(in srgb, #10b981 10%, transparent);
+  color: #059669;
+  border-color: color-mix(in srgb, #10b981 30%, transparent);
+}
+
+.chip-backup {
+  background: color-mix(in srgb, #f59e0b 10%, transparent);
+  color: #b45309;
+  border-color: color-mix(in srgb, #f59e0b 30%, transparent);
+}
+
+.chip-dev,
+.chip-none {
+  background: color-mix(in srgb, #818cf8 10%, transparent);
+  color: #4f46e5;
+  border-color: color-mix(in srgb, #818cf8 30%, transparent);
+}
+
+.chip-local {
+  background: color-mix(in srgb, #94a3b8 10%, transparent);
+  color: #64748b;
+  border-color: color-mix(in srgb, #94a3b8 30%, transparent);
+}
+
+html[data-theme='dark'] .chip-prod { color: #34d399; }
+html[data-theme='dark'] .chip-backup { color: #fbbf24; }
+html[data-theme='dark'] .chip-dev,
+html[data-theme='dark'] .chip-none { color: #a5b4fc; }
+html[data-theme='dark'] .chip-local { color: #94a3b8; }
+html[data-theme='dark'] .rollback-btn { color: #fbbf24; }
+
+@keyframes spin-live {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+.ri-steps {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.ri-step {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  padding: 4px 10px;
+  border-radius: 99px;
+  background: var(--panel-alt);
+  border: 1px solid var(--border-color);
+}
+
+.ri-step.active {
+  color: var(--brand);
+  background: var(--brand-muted);
+  border-color: color-mix(in srgb, var(--brand) 30%, transparent);
+}
+
+.ri-step-arrow { color: var(--muted); font-size: 16px; }
+
+.ri-category-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.ri-cat-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 18px 16px;
+  border-radius: 12px;
+  border: 2px solid var(--border-color);
+  background: var(--panel-alt);
+  color: var(--muted);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.ri-cat-btn svg { width: 24px; height: 24px; }
+.ri-cat-btn span { font-size: 15px; font-weight: 600; color: var(--text); }
+.ri-cat-btn small { font-size: 11px; color: var(--muted); }
+.ri-cat-btn.selected {
+  border-color: var(--brand);
+  background: var(--brand-muted);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 12%, transparent);
+}
+.ri-cat-btn.selected span { color: var(--brand); }
+
+.ri-list-wrap { border: 1px solid var(--border-color); border-radius: 12px; overflow: hidden; }
+.ri-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: var(--panel-alt);
+  border-bottom: 1px solid var(--border-color);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.ri-sel-count { font-size: 12px; font-weight: 400; color: var(--muted); }
+.ri-loading, .ri-empty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 24px 20px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.ri-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--brand);
+  border-radius: 50%;
+  animation: spin-live 0.75s linear infinite;
+}
+.ri-list { max-height: 320px; overflow-y: auto; }
+.ri-list::-webkit-scrollbar { width: 5px; }
+.ri-list::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 99px; }
+.ri-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-color);
+  user-select: none;
+}
+.ri-item:last-child { border-bottom: none; }
+.ri-item:hover:not(.is-current) { background: var(--panel-alt); }
+.ri-item.is-current { opacity: 0.55; cursor: not-allowed; }
+.ri-item.is-selected { background: var(--brand-muted); }
+.ri-checkbox { margin-top: 3px; accent-color: var(--brand); }
+.ri-item-body { flex: 1; min-width: 0; }
+.ri-item-top { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap; }
+.ri-proj { font-size: 13px; font-weight: 600; color: var(--text); }
+.ri-node-tag { font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 99px; border: 1px solid transparent; }
+.rn-prod { background: color-mix(in srgb, #10b981 12%, transparent); color: #059669; border-color: color-mix(in srgb, #10b981 30%, transparent); }
+.rn-backup { background: color-mix(in srgb, #f59e0b 12%, transparent); color: #b45309; border-color: color-mix(in srgb, #f59e0b 30%, transparent); }
+.rn-dev { background: color-mix(in srgb, #818cf8 12%, transparent); color: #4f46e5; border-color: color-mix(in srgb, #818cf8 30%, transparent); }
+.rn-local { background: color-mix(in srgb, #94a3b8 12%, transparent); color: #64748b; border-color: color-mix(in srgb, #94a3b8 30%, transparent); }
+.ri-in-use-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--success) 30%, transparent);
+  padding: 2px 8px;
+  border-radius: 99px;
+}
+.ri-in-use-badge svg { width: 11px; height: 11px; }
+.ri-ver {
+  font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+  font-size: 12px;
+  color: var(--muted);
+  word-break: break-all;
+}
+.ri-item.is-selected .ri-ver { color: var(--brand); }
+.ri-warning {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: color-mix(in srgb, var(--danger) 8%, var(--panel));
+  border-top: 1px solid color-mix(in srgb, var(--danger) 25%, transparent);
+  font-size: 13px;
+  color: var(--danger);
+}
+.ri-warning svg { width: 16px; height: 16px; flex-shrink: 0; }
 
 .container{
     margin: 10px 0px;
@@ -1328,22 +2150,24 @@ onMounted (() => {
 /* =============================== */
 /* template 中使用了 .table-container 包裹 el-table */
 .table-container {
-    /* 確保容器使用主題面板背景色，以消除白色殘留 */
-    /* background-color: var(--panel, #1e293b);  */
     border-radius: 15px;
-    padding: 0; /* 清除內部額外間距 */
-    overflow: hidden;
+    padding: 0;
+    overflow-x: auto;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
-    margin-top: 20px; /* 給頂部按鈕留出空間 */
-
-    /* <--- 設定最大寬度，您可以根據需要調整這個值 (例如 1000px, 1400px) */
-    max-width: 1500px; /* 設定您覺得舒適的最大寬度 */
-    width: 95%;       /* 確保在小螢幕下佔滿 */
-    margin-left: auto;   /* <--- 讓左邊自動填滿空間 */
-    margin-right: auto;  /* <--- 讓右邊自動填滿空間，實現水平居中 */
+    margin-top: 20px;
+    max-width: 1500px;
+    width: 95%;
+    margin-left: auto;
+    margin-right: auto;
 }
 
 /* 核心：覆蓋 Element Plus 表格的 CSS 變量，採用低飽和度色彩 */
+:deep(.table-container .el-table) {
+    font-size: 13px;
+    line-height: 1.6;
+    min-width: 1200px;
+}
+
 :deep(.el-table) {
     /* 讓表格體透明，這樣它會透出 .table-container 的深色背景 */
     --el-table-bg-color: var(--table-bg-color) !important;
@@ -1377,6 +2201,7 @@ onMounted (() => {
 :deep(.el-table td.el-table__cell) {
     background-color: var(--table-bg-color) !important;
     border-bottom: 1px solid var(--table-border-color) !important;
+    padding: 10px 12px !important;
 }
 
 /* 調整空數據提示文字的顏色 */

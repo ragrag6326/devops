@@ -300,6 +300,63 @@ public class MonitorServiceImpl extends ServiceImpl<SystemAudLogMapper, SystemAu
     }
 
     @Override
+    public List<String> getDockerImageVersion(String type) {
+        if (!"current".equals(type) && !"history".equals(type)) {
+            throw new IllegalArgumentException("type must be current or history");
+        }
+        List<String> result = new ArrayList<>();
+        String scriptPath = "/opt/vcs/tools/common/manage_images.sh";
+        ProcessBuilder pb = new ProcessBuilder("bash", scriptPath, "list", type);
+        try {
+            Process process = pb.start();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (!line.isBlank()) {
+                        result.add(line.trim());
+                    }
+                }
+            }
+            process.waitFor();
+        } catch (Exception e) {
+            log.error("抓取 image 清單失敗 type={}", type, e);
+        }
+        return result;
+    }
+
+    @Override
+    public List<ImageInfoDTO> getRollBackImageVersions(String projectName) {
+        return getDockerImageVersions(projectName);
+    }
+
+    @Override
+    public String deleteImage(String imageName) {
+        String scriptPath = "/opt/vcs/tools/common/manage_images.sh";
+        ProcessBuilder pb = new ProcessBuilder("bash", scriptPath, "delete", imageName);
+        pb.redirectErrorStream(true);
+        try {
+            Process process = pb.start();
+            StringBuilder outputBuffer = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    log.info("Script Output: {}", line);
+                    outputBuffer.append(line).append('\n');
+                }
+            }
+            int exitCode = process.waitFor();
+            if (exitCode == 0) {
+                return "刪除成功";
+            }
+            log.warn("delete image failed exitCode={} output={}", exitCode, outputBuffer);
+            return "刪除失敗";
+        } catch (Exception e) {
+            log.error("delete image error", e);
+            return "刪除失敗";
+        }
+    }
+
+    @Override
     public String renewImage(String opertaionName , String projectName, String nodeType, String version) {
         // 1. 基本檢核 (防止路徑遍歷攻擊)
         if (!projectName.matches("^[a-zA-Z0-9_]+$")) {

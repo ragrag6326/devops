@@ -106,6 +106,33 @@ public class MonitorController {
         return Result.success(dockerImageVersions);
     }
 
+    @Operation(summary = "6.0.5b 取得目前/歷史 image 清單", description = "type: current 或 history")
+    @GetMapping("/getImageVersion/{type}")
+    public Result<List<String>> getImageVersionByType(
+            @Parameter(description = "current 或 history", required = true, example = "current")
+            @PathVariable String type
+    ) {
+        return Result.success(MonitorService.getDockerImageVersion(type));
+    }
+
+    @Operation(summary = "6.0.5c 退版可選版本", description = "取得專案退版用版本清單")
+    @GetMapping("/getRollBackImageVersion")
+    public Result<List<ImageInfoDTO>> getRollBackImageVersion(
+            @Parameter(description = "專案名稱", required = true, example = "go_nuxt")
+            @RequestParam String projectName
+    ) {
+        return Result.success(MonitorService.getRollBackImageVersions(projectName));
+    }
+
+    @Operation(summary = "6.0.5d 移除 Docker image", description = "刪除指定 image")
+    @GetMapping("/deleteImage")
+    public Result<String> deleteImage(
+            @Parameter(description = "image 完整名稱", required = true)
+            @RequestParam String imageName
+    ) {
+        return Result.success(MonitorService.deleteImage(imageName));
+    }
+
     @Operation(summary = "6.0.6 版本號更新", description = "退版")
     @PostMapping("/renewImage")
     public Result<String> renewimage (@RequestBody RenewImageDTO dto ) {

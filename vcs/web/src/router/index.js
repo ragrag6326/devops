@@ -3,6 +3,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/homepage/index.vue'
 import VersionHistoryView from '../views/version/history/index.vue'
 import MRHistoryView from '../views/mr/history/index.vue'
+import MRReviewView from '../views/mr/review/index.vue'
 import UserListView from '../views/user/list/index.vue'
 import LoginView from '../views/login/index.vue'
 
@@ -27,9 +28,10 @@ const router = createRouter({
       name: '', 
       component: LayoutView ,
       children:[
-        {path: '/homepage',name: 'homepage',component: HomeView},
+        {path: '/homepage',name: 'homepage',component: HomeView, meta: { title: '版本控制平台' }},
         {path: '/version/history',name: 'VersionHistory',component: VersionHistoryView , meta: { title: '版本歷史查詢' , keepAlive: true}},
         {path: '/mr/history',name: 'MRHistory',component: MRHistoryView , meta: { title: 'MR歷史查詢' , keepAlive: true }},
+        {path: '/mr/review',name: 'MRReview',component: MRReviewView , meta: { title: 'MR AI 程式碼審核' , keepAlive: true }},
         {path: '/user/list',name: 'UserList',component: UserListView , meta: { title: '用戶查詢' , keepAlive: true }},
       
         {
