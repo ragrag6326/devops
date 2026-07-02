@@ -8,21 +8,20 @@ import com.tkb.entity.GitlabMrEntity;
 import com.tkb.entity.SystemAudLogEntity;
 import com.tkb.entity.UserEntity;
 import com.tkb.mapper.SystemAudLogMapper;
+import com.tkb.entity.ProjectEntity;
 import com.tkb.service.MonitorService;
+import com.tkb.service.ProjectService;
 import com.tkb.utils.Constant.SystemAudLogState;
+import com.tkb.utils.ShellExecutor;
 import com.tkb.vo.PageBean;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -31,208 +30,82 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class MonitorServiceImpl extends ServiceImpl<SystemAudLogMapper, SystemAudLogEntity>  implements MonitorService  {
 
+    // 所有通用腳本集中於此目錄，新增專案只需建立 {project}/config.sh
+    private static final String TOOLS_COMMON = "/opt/vcs/tools/common";
+    private static final String MANAGE_IMAGES_SCRIPT = TOOLS_COMMON + "/manage_images.sh";
+
+    private final ProjectService projectService;
+
+
     @Override
-    public int healthCheck(String projectName, String nodeType) {
-
-        // 健康檢查腳本位置
-        String scriptPath = "/opt/vcs/tools/"+ projectName +"/healthcheck.sh";
-        ProcessBuilder pb = new ProcessBuilder("bash", scriptPath, nodeType);
-
-        // 合併錯誤流，方便在日誌中看到腳本內的 echo 內容
-        pb.redirectErrorStream(true);
-
-        try {
-            Process process = pb.start();
-
-            // 讀取腳本的標準輸出 (Optional: 如果想知道腳本印了什麼)
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    log.info("Script Output: {}", line);
-                }
-            }
-
-            // 等待腳本執行結束並取得返回值
-            int exitCode = process.waitFor();
-            if (exitCode == 0) {
-                log.info("{} 健康檢查通過" , projectName);
-
-                return 200;
-            } else {
-                log.info("{} 健康檢查失敗，代碼: {}", projectName , exitCode);
-            }
-
+    public int healthCheck(String env, String projectName, String nodeType) {
+        log.info("healthCheck env={} project={} node={}", env, projectName, nodeType);
+        ShellExecutor.ExecResult result = ShellExecutor.execMerged(
+                TOOLS_COMMON + "/healthcheck.sh", resolveSshEnv(env, projectName), projectName, nodeType);
+        if (result.isSuccess()) {
+            log.info("{} 健康檢查通過", projectName);
+            return 200;
+        } else {
+            log.info("{} 健康檢查失敗，exitCode={}", projectName, result.exitCode());
             return 404;
-
-        } catch (IOException | InterruptedException e) {
-            log.error("執行腳本時發生錯誤", e);
-            // 發生異常時，視為檢查失敗返回 1
-            return 1;
         }
     }
 
     @Override
-    public String getTraffic(String projectName, String trafficType) {
-
-        // 取得流量腳本位置
-        String scriptPath = "/opt/vcs/tools/"+ projectName +"/get_traffic.sh";
-        ProcessBuilder pb = new ProcessBuilder("bash", scriptPath, trafficType);
-        pb.redirectErrorStream(true);
-
-        try {
-            Process process = pb.start();
-
-            // 讀取腳本的標準輸出 (Optional: 如果想知道腳本印了什麼)
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    log.info("Script Output: {}", line);
-                }
-            }
-
-            // 等待腳本執行結束並取得返回值
-            int exitCode = process.waitFor();
-            if (exitCode == 0) {
-                log.info( "{} 目前 {} 流量在正式機" , projectName , trafficType );
-                return "BLUE_ACTIVE".trim();
-
-            } else if (exitCode == 1) {
-                log.info( trafficType + "{} 目前 {} 流量在備援機" , projectName , trafficType );
-                return "GREEN_ACTIVE".trim();
-            }
-
-            return "獲取失敗";
-
-        } catch (IOException | InterruptedException e) {
-            log.error("執行腳本時發生錯誤", e);
-            // 發生異常時，視為檢查失敗返回 1
-            return projectName + "執行發生異常";
+    public String getTraffic(String env, String projectName, String trafficType) {
+        log.info("getTraffic env={} project={} type={}", env, projectName, trafficType);
+        ShellExecutor.ExecResult result = ShellExecutor.execMerged(
+                TOOLS_COMMON + "/get_traffic.sh", resolveSshEnv(env, projectName), projectName, trafficType);
+        if (result.exitCode() == 0) {
+            log.info("{} 目前 {} 流量在 blue", projectName, trafficType);
+            return "BLUE_ACTIVE";
+        } else if (result.exitCode() == 1) {
+            log.info("{} 目前 {} 流量在 green", projectName, trafficType);
+            return "GREEN_ACTIVE";
         }
-
+        return "獲取失敗";
     }
 
     @Override
-    public String switchTraffic(String opertaionName ,String projectName ,String nodeType, String mode) {
-        // 取得流量腳本位置
-        String scriptPath = "/opt/vcs/tools/"+ projectName +"/switch_traffic.sh";
-        ProcessBuilder pb = new ProcessBuilder("bash", scriptPath, nodeType , mode);
-        pb.redirectErrorStream(true);
+    public String switchTraffic(String env, String opertaionName, String projectName, String nodeType, String mode) {
+        log.info("switchTraffic env={} project={} node={} mode={}", env, projectName, nodeType, mode);
+        ShellExecutor.ExecResult result = ShellExecutor.execMerged(
+                TOOLS_COMMON + "/switch_traffic.sh", resolveSshEnv(env, projectName), projectName, nodeType,
+                (mode != null ? mode : ""));
 
-        try {
-            Process process = pb.start();
+        String modeLabel = (mode == null || !mode.equals("header")) ? "正式" : mode;
 
-            // 讀取腳本的標準輸出
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    log.info("Script Output: {}", line);
-                }
-            }
+        if (result.exitCode() == 0) {
+            saveAuditLog(opertaionName, projectName, "將 (" + modeLabel + ") 流量切換至" + nodeType,
+                    SystemAudLogState.SUCCESS.getCode());
+            log.info("{} 切換完畢 目標:{} mode:{}", projectName, nodeType, modeLabel);
+            return projectName + " " + nodeType + " " + modeLabel + " 流量切換完畢";
 
-            // 等待腳本執行結束並取得返回值
-            int exitCode = process.waitFor();
-            if (exitCode == 0) {
-
-                if (mode == null || !mode.equals("header")) {
-                    mode = "正式";
-                }
-
-                // 1. 建立 Entity 物件
-                SystemAudLogEntity audLog = new SystemAudLogEntity();
-                audLog.setProjectName(projectName);
-                audLog.setAction("將 (" + mode + ") 流量切換至" + nodeType);
-                audLog.setOperator(opertaionName);
-                audLog.setStatus(SystemAudLogState.SUCCESS.getCode());
-                // 2. 設定時間：使用 .withNano(0) 去除毫秒，讓 DB 存入整數秒
-                audLog.setOperationTime(LocalDateTime.now().withNano(0));
-                // 3. 執行新增 (Insert)
-                boolean success = this.save(audLog);
-
-                if (success) {
-                    log.info( "{} 切換並記錄完畢 目標:{}  header:{}" , projectName , nodeType , mode );
-                }
-                return projectName + " " + nodeType + " " + mode + "流量切換完畢"  ;
-
-            } else if (exitCode == 10) {
-                log.info( "{} {} 流量無須切換" , projectName , nodeType );
-                return projectName + " " + nodeType + "無須切換";
-            }
-
-            // 1. 建立 Entity 物件
-            SystemAudLogEntity audLog = new SystemAudLogEntity();
-            audLog.setProjectName(projectName);
-            audLog.setAction("將 (" + mode + ") 流量切換至" + nodeType);
-            audLog.setOperator(opertaionName);
-            audLog.setStatus(SystemAudLogState.FAILED.getCode());
-            // 2. 設定時間：使用 .withNano(0) 去除毫秒，讓 DB 存入整數秒
-            audLog.setOperationTime(LocalDateTime.now().withNano(0));
-            // 3. 執行新增 (Insert)
-            boolean success = this.save(audLog);
-
-            if (success) {
-                log.info( "{} 切換並記錄失敗 目標:{}  header:{}" , projectName , nodeType , mode );
-            }
-
-            return "切換失敗";
-
-        } catch (IOException | InterruptedException e) {
-            log.error("執行腳本時發生錯誤", e);
-            // 發生異常時，視為檢查失敗返回 1
-            return "執行發生異常";
+        } else if (result.exitCode() == 10) {
+            log.info("{} {} 流量無須切換", projectName, nodeType);
+            return projectName + " " + nodeType + " 無須切換";
         }
 
+        saveAuditLog(opertaionName, projectName, "將 (" + modeLabel + ") 流量切換至" + nodeType,
+                SystemAudLogState.FAILED.getCode());
+        return "切換失敗";
     }
 
     @Override
-    public String restartService(String opertaionName ,String projectName, String target) {
+    public String restartService(String env, String opertaionName, String projectName, String target) {
+        log.info("restartService env={} project={} target={}", env, projectName, target);
+        ShellExecutor.ExecResult result = ShellExecutor.execMerged(
+                TOOLS_COMMON + "/restartContainer.sh", resolveSshEnv(env, projectName), projectName, target);
 
-        // 取得流量腳本位置
-        String scriptPath = "/opt/vcs/tools/"+ projectName +"/restartContainer.sh";
-        ProcessBuilder pb = new ProcessBuilder("bash", scriptPath , target);
-        pb.redirectErrorStream(true);
-
-        try {
-            Process process = pb.start();
-
-            // 讀取腳本的 echo 輸出 (即 result)
-            String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
-
-            // 等待腳本執行結束並取得返回值
-            int exitCode = process.waitFor();
-            if (exitCode == 0) {
-
-                // 1. 建立 Entity 物件
-                SystemAudLogEntity audLog = new SystemAudLogEntity();
-                audLog.setProjectName(projectName);
-                audLog.setAction("重啟 (" + target + ") container");
-                audLog.setOperator(opertaionName);
-                audLog.setStatus(SystemAudLogState.SUCCESS.getCode());
-                // 2. 設定時間：使用 .withNano(0) 去除毫秒，讓 DB 存入整數秒
-                audLog.setOperationTime(LocalDateTime.now().withNano(0));
-                // 3. 執行新增 (Insert)
-                boolean success = this.save(audLog);
-
-                if ( success ) {
-                    log.info("{} 重啟成功並紀錄成功: {}", projectName ,output);
-                }
-                return output;
-            } else  {
-                SystemAudLogEntity audLog = new SystemAudLogEntity();
-                audLog.setProjectName(projectName);
-                audLog.setAction("重啟 (" + target + ") container");
-                audLog.setOperator(opertaionName);
-                audLog.setStatus(SystemAudLogState.FAILED.getCode());
-                audLog.setOperationTime(LocalDateTime.now().withNano(0));
-                boolean success = this.save(audLog);
-
-                if ( success ) {
-                    log.info("重啟失敗紀錄到日誌中, Code: {}, Msg: {}", exitCode, output);
-                }
-                throw new RuntimeException("重啟失敗: " + output);
-            }
-
-        } catch (Exception e ) {
-            throw new RuntimeException("執行 Shell 發生錯誤", e);
+        if (result.isSuccess()) {
+            saveAuditLog(opertaionName, projectName, "重啟 (" + target + ") container",
+                    SystemAudLogState.SUCCESS.getCode());
+            log.info("{} 重啟成功: {}", projectName, result.output());
+            return result.output();
+        } else {
+            saveAuditLog(opertaionName, projectName, "重啟 (" + target + ") container",
+                    SystemAudLogState.FAILED.getCode());
+            throw new RuntimeException("重啟失敗: " + result.output());
         }
     }
 
@@ -253,162 +126,125 @@ public class MonitorServiceImpl extends ServiceImpl<SystemAudLogMapper, SystemAu
         return new PageBean(pageList.getTotal(), pageList.getResult());
     }
 
+
+    /**
+     * 取得退版可選版本（解析 manage_images.sh {env} history 的輸出）
+     * 輸出格式：backend-prod/tkbtv:1.0.5  or  frontend-prod/go_nuxt-backup:1.0.6
+     */
     @Override
-    public List<ImageInfoDTO> getDockerImageVersions(String projectName) {
-        List<ImageInfoDTO> result = new ArrayList<>();
-        // 定義你想區分的類型
-        Map<String, List<String>> versionMap = new HashMap<>();
-        versionMap.put("prod", new ArrayList<>());
+    public List<ImageInfoDTO> getDockerImageVersions(String env, String projectName) {
+        // 優先用 project_config.image_keyword 做比對；沒設定時才 fallback 到 projectName
+        // 解決 prod 命名(tkbgoapi) 與 dev 命名(goapi) 不一致的問題
+        ProjectEntity project = projectService.findByName(projectName);
+        String keyword = (project != null && project.getImageKeyword() != null && !project.getImageKeyword().isBlank())
+                ? project.getImageKeyword()
+                : projectName;
+
+        log.info("getDockerImageVersions env={} projectName={} keyword={}", env, projectName, keyword);
+
+        Map<String, List<String>> versionMap = new LinkedHashMap<>();
+        versionMap.put("prod",   new ArrayList<>());
         versionMap.put("backup", new ArrayList<>());
 
-        String scriptPath = "/opt/vcs/tools/" + projectName + "/get_images.sh";
-        ProcessBuilder pb = new ProcessBuilder("bash", scriptPath, projectName);
+        List<String> lines = ShellExecutor.exec(MANAGE_IMAGES_SCRIPT, resolveSshEnv(env, projectName), "history");
 
-        try {
-            Process process = pb.start();
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    // line 格式範例: frontend-prod/go_nuxt-backup:1.0.6
-                    String[] parts = line.split(":");
-                    if (parts.length < 2) continue;
-
-                    String repoName = parts[0];
-                    String version = parts[1];
-
-                    // 根據 repo 名稱判斷是 prod 還是 backup
-                    if (repoName.contains("-prod")) {
-                        versionMap.get("prod").add(version);
-                    } else if (repoName.contains("-backup")) {
-                        versionMap.get("backup").add(version);
-                    }
-                }
+        for (String line : lines) {
+            if (!line.contains(keyword)) continue;
+            String[] parts = line.split(":");
+            if (parts.length < 2) continue;
+            String repo    = parts[0]; // e.g. backend-prod/tkbgoapi  or  backend-dev/goapi
+            String version = parts[1]; // e.g. 1.0.72
+            if (repo.contains("-backup")) {
+                versionMap.get("backup").add(version);
+            } else if (repo.contains("-prod") || repo.contains("-dev")) {
+                // dev 機器的 image repo 為 backend-dev / frontend-dev，同樣歸入 prod bucket
+                versionMap.get("prod").add(version);
             }
-            process.waitFor();
-
-            // 轉換為前端需要的格式
-            versionMap.forEach((type, versions) -> {
-                if (!versions.isEmpty()) {
-                    result.add(new ImageInfoDTO(type, versions));
-                }
-            });
-
-        } catch (Exception e) {
-            log.error("抓取版本失敗", e);
         }
+
+        List<ImageInfoDTO> result = new ArrayList<>();
+        versionMap.forEach((type, versions) -> {
+            if (!versions.isEmpty()) result.add(new ImageInfoDTO(type, versions));
+        });
         return result;
     }
 
+    /**
+     * 取得指定環境的 image 清單
+     * 腳本呼叫：manage_images.sh {env} {type}
+     *   env  = prod | dev
+     *   type = current | history
+     */
     @Override
-    public List<String> getDockerImageVersion(String type) {
+    public List<String> getDockerImageVersion(String env, String type) {
         if (!"current".equals(type) && !"history".equals(type)) {
-            throw new IllegalArgumentException("type must be current or history");
+            throw new IllegalArgumentException("type must be 'current' or 'history'");
         }
-        List<String> result = new ArrayList<>();
-        String scriptPath = "/opt/vcs/tools/common/manage_images.sh";
-        ProcessBuilder pb = new ProcessBuilder("bash", scriptPath, "list", type);
-        try {
-            Process process = pb.start();
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    if (!line.isBlank()) {
-                        result.add(line.trim());
-                    }
-                }
-            }
-            process.waitFor();
-        } catch (Exception e) {
-            log.error("抓取 image 清單失敗 type={}", type, e);
+        if (!"prod".equals(env) && !"dev".equals(env)) {
+            throw new IllegalArgumentException("env must be 'prod' or 'dev'");
         }
-        return result;
+        // 正確呼叫：manage_images.sh {env} {type}
+        log.info("getDockerImageVersion env={} type={}", env, type);
+        return ShellExecutor.exec(MANAGE_IMAGES_SCRIPT, env, type);
     }
 
     @Override
-    public List<ImageInfoDTO> getRollBackImageVersions(String projectName) {
-        return getDockerImageVersions(projectName);
+    public List<ImageInfoDTO> getRollBackImageVersions(String env, String projectName) {
+        return getDockerImageVersions(env, projectName);
+    }
+
+    /**
+     * 刪除指定環境的 image
+     * 腳本呼叫：manage_images.sh {env} delete {imageName}
+     */
+    @Override
+    public String deleteImage(String env, String imageName) {
+        log.info("deleteImage env={} image={}", env, imageName);
+        ShellExecutor.ExecResult result = ShellExecutor.execMerged(MANAGE_IMAGES_SCRIPT, env, "delete", imageName);
+        return result.isSuccess() ? "刪除成功" : "刪除失敗";
     }
 
     @Override
-    public String deleteImage(String imageName) {
-        String scriptPath = "/opt/vcs/tools/common/manage_images.sh";
-        ProcessBuilder pb = new ProcessBuilder("bash", scriptPath, "delete", imageName);
-        pb.redirectErrorStream(true);
-        try {
-            Process process = pb.start();
-            StringBuilder outputBuffer = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    log.info("Script Output: {}", line);
-                    outputBuffer.append(line).append('\n');
-                }
-            }
-            int exitCode = process.waitFor();
-            if (exitCode == 0) {
-                return "刪除成功";
-            }
-            log.warn("delete image failed exitCode={} output={}", exitCode, outputBuffer);
-            return "刪除失敗";
-        } catch (Exception e) {
-            log.error("delete image error", e);
-            return "刪除失敗";
-        }
-    }
-
-    @Override
-    public String renewImage(String opertaionName , String projectName, String nodeType, String version) {
-        // 1. 基本檢核 (防止路徑遍歷攻擊)
+    public String renewImage(String env, String opertaionName, String projectName, String nodeType, String version) {
         if (!projectName.matches("^[a-zA-Z0-9_]+$")) {
             return "非法專案名稱";
         }
 
-        // 更新image腳本位置
-        String scriptPath = "/opt/vcs/tools/"+ projectName +"/version_renew.sh";
-        ProcessBuilder pb = new ProcessBuilder("bash", scriptPath, nodeType , version);
-        pb.redirectErrorStream(true);
+        log.info("renewImage env={} project={} node={} version={}", env, projectName, nodeType, version);
+        ShellExecutor.ExecResult result = ShellExecutor.execMerged(
+                TOOLS_COMMON + "/version_renew.sh", resolveSshEnv(env, projectName), projectName, nodeType, version);
 
-        try {
-            log.info("開始執行退版腳本: {} {} {}", scriptPath, nodeType, version);
-            Process process = pb.start();
-
-            // 讀取腳本的標準輸出 (建議用 StringBuilder 收集錯誤訊息，以便 Debug)
-            StringBuilder outputBuffer = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    log.info("Script Output: {}", line);
-                    outputBuffer.append(line).append("\n"); // 收集 log
-                }
-            }
-            // 等待腳本執行結束
-            int exitCode = process.waitFor();
-
-            if (exitCode == 0) {
-                // --- 執行成功 ---
-                String successMsg = String.format("將 (%s) 更新版號為 %s", nodeType, version);
-                saveAuditLog( opertaionName , projectName, successMsg, SystemAudLogState.SUCCESS.getCode());
-
-                log.info("{} 切換並記錄完畢 目標:{} 版號:{}", projectName, nodeType, version);
-                return projectName + " " + nodeType + " " + version + " 版本更新完成";
-            } else {
-                // --- 執行失敗 ---
-                String errorMsg = String.format("(%s) 更新版號為 %s 失敗", nodeType, version);
-                saveAuditLog(opertaionName ,projectName, errorMsg, SystemAudLogState.FAILED.getCode());
-
-                log.warn("{} 更新失敗 ExitCode:{} \n輸出:{}", projectName, exitCode, outputBuffer.toString());
-                return "更新失敗 (Script ExitCode: " + exitCode + ")";
-            }
-
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt(); // 恢復中斷狀態
-            log.error("執行腳本被中斷", e);
-            return "執行被中斷";
-        } catch (IOException e) {
-            log.error("執行腳本時發生 I/O 錯誤", e);
-            return "執行發生異常";
+        if (result.isSuccess()) {
+            String successMsg = String.format("將 (%s) 更新版號為 %s", nodeType, version);
+            saveAuditLog(opertaionName, projectName, successMsg, SystemAudLogState.SUCCESS.getCode());
+            log.info("{} 退版完畢 目標:{} 版號:{}", projectName, nodeType, version);
+            return projectName + " " + nodeType + " " + version + " 版本更新完成";
+        } else {
+            String errorMsg = String.format("(%s) 更新版號為 %s 失敗", nodeType, version);
+            saveAuditLog(opertaionName, projectName, errorMsg, SystemAudLogState.FAILED.getCode());
+            log.warn("{} 更新失敗\n輸出:{}", projectName, result.output());
+            return "更新失敗 (ExitCode: " + result.exitCode() + ")";
         }
     }
+
+    /**
+     * 依 DB prod_ssh_env / dev_ssh_env 解析實際 SSH 目標機器。
+     * 未設定時原樣回傳 env（向下相容）。
+     */
+    private String resolveSshEnv(String env, String projectName) {
+        ProjectEntity proj = projectService.findByName(projectName);
+        if (proj == null) return env;
+        if ("prod".equals(env) && proj.getProdSshEnv() != null && !proj.getProdSshEnv().isBlank()) {
+            log.debug("resolveSshEnv: {} prod → {}", projectName, proj.getProdSshEnv());
+            return proj.getProdSshEnv();
+        }
+        if ("dev".equals(env) && proj.getDevSshEnv() != null && !proj.getDevSshEnv().isBlank()) {
+            log.debug("resolveSshEnv: {} dev → {}", projectName, proj.getDevSshEnv());
+            return proj.getDevSshEnv();
+        }
+        return env;
+    }
+
 
     /**
      * 提取共用的 Log 寫入邏輯

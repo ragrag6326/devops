@@ -1,9 +1,10 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { Search, Key, MagicStick, Delete } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import axios from 'axios' 
-import dayjs from 'dayjs' 
+import axios from 'axios'
+import dayjs from 'dayjs'
+import { getProjectList } from '@/api/project'
 
 // --- 設定 ---
 //  n8n Webhook URL
@@ -14,8 +15,8 @@ const activeTab = ref('strict')
 const loading = ref(false)
 const logData = ref([])
 
-// 專案名
-const projectNames = ['tv', 'go-api', 'go-nuxt']
+// 專案名（從 DB 動態載入，使用 scriptName 對應 log 目錄名）
+const projectNames = ref([])
 
 // Strict 模式表單
 const strictForm = ref({
@@ -183,6 +184,13 @@ const formatJavaLog = (text) => {
   return formatted;
 }
 
+onMounted(async () => {
+  const res = await getProjectList()
+  if (res.code === 1) {
+    // scriptName 對應 tools 目錄名（即 log 搜尋用的名稱），無 scriptName 時 fallback 到 name
+    projectNames.value = (res.data || []).map(p => p.scriptName || p.name)
+  }
+})
 
 </script>
 

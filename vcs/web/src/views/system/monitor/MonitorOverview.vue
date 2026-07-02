@@ -1,16 +1,28 @@
 <script setup>
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { ArrowRight, Refresh, Timer, List, Search, Delete } from '@element-plus/icons-vue' // 新增 icon
+import { ArrowRight, Refresh, Timer, List, Search, Delete } from '@element-plus/icons-vue'
 import { healthCheck, getCurrentTraffic, getAudLogPage } from '@/api/monitor'
+import { getProjectList } from '@/api/project'
 import { ElMessage } from 'element-plus'
 
 const router = useRouter()
 
-// --- 專案與卡片狀態 ---
-const projectNames = ['tv', 'go-api', 'go_nuxt', 'player' ,'test']
+// --- 環境選擇 (prod | dev) ---
+const selectedEnv = ref('prod')
+
+// --- 從 DB 取得的專案清單 ---
+const allProjects = ref([])   // 全部啟用中的專案
+// 依當前 env 過濾：prod 顯示有 hasProd=1，dev 顯示有 hasDev=1
+const envProjects = computed(() =>
+  allProjects.value.filter(p =>
+    selectedEnv.value === 'prod' ? p.hasProd === 1 : p.hasDev === 1
+  )
+)
+
+// --- 卡片狀態 ---
 const projects = ref([])
-const dashboardLoading = ref(false) // 專給卡片區塊用的 loading
+const dashboardLoading = ref(false)
 
 // --- 輪詢設定 ---
 const pollInterval = ref(30000)
@@ -52,28 +64,23 @@ watch(() => searchForm.value.date, (val) => {
 
 // --- 1. 核心邏輯分離：只抓取 Dashboard 卡片狀態 ---
 const fetchDashboardStatus = async () => {
-    // 如果是自動輪詢，通常不顯示 loading 遮罩以免畫面閃爍；手動刷新時才顯示
-    // 這裡設為 true 會讓卡片區塊變灰
-    // dashboardLoading.value = true 
-    
     try {
-        const projectPromises = projectNames.map(async (name) => {
-            // 使用 allSettled 避免其中一個 API 掛掉導致全部畫面空白
+        const projectPromises = envProjects.value.map(async (proj) => {
+            // scriptName 對應 tools/ 目錄名；displayName 用於介面顯示
+            const scriptName = proj.scriptName || proj.name
             const results = await Promise.allSettled([
-                healthCheck(name, 'blue'),
-                healthCheck(name, 'green'),
-                getCurrentTraffic(name, 'live')
+                healthCheck(selectedEnv.value, scriptName, 'blue'),
+                healthCheck(selectedEnv.value, scriptName, 'green'),
+                getCurrentTraffic(selectedEnv.value, scriptName, 'live')
             ])
-
-            // 解析結果，若失敗給予預設值
-            const blueRes = results[0].status === 'fulfilled' ? results[0].value : { data: 500 }
-            const greenRes = results[1].status === 'fulfilled' ? results[1].value : { data: 500 }
+            const blueRes   = results[0].status === 'fulfilled' ? results[0].value : { data: 500 }
+            const greenRes  = results[1].status === 'fulfilled' ? results[1].value : { data: 500 }
             const trafficRes = results[2].status === 'fulfilled' ? results[2].value : { data: 'UNKNOWN' }
-
             return {
-                name: name,
-                blueStatus: blueRes.data,
-                greenStatus: greenRes.data,
+                scriptName,
+                displayName: proj.displayName || proj.name,
+                blueStatus:   blueRes.data,
+                greenStatus:  greenRes.data,
                 activeTraffic: trafficRes.data
             }
         })
@@ -143,8 +150,8 @@ const handleCurrentChange = (val) => {
 }
 
 // --- 路由跳轉 ---
-const goToDetail = (name) => {
-    router.push(`/system/monitor/${name}`)
+const goToDetail = (proj) => {
+    router.push(`/system/monitor/${proj.scriptName}?env=${selectedEnv.value}&displayName=${encodeURIComponent(proj.displayName)}`)
 }
 
 // --- 輪詢控制 (只輪詢 Dashboard 狀態，不輪詢日誌) ---
@@ -179,10 +186,17 @@ watch(pollInterval, (newVal) => {
 })
 
 // --- 生命週期 ---
-onMounted(() => {
-    fetchDashboardStatus() // 抓卡片
-    fetchLogs()            // 抓日誌
-    startPolling()         // 啟動卡片輪詢
+onMounted(async () => {
+    // 先從 DB 取得專案清單，再啟動輪詢
+    try {
+        const res = await getProjectList()
+        allProjects.value = res.data || []
+    } catch (e) {
+        ElMessage.error('無法載入專案清單')
+    }
+    fetchDashboardStatus()
+    fetchLogs()
+    startPolling()
 })
 
 onUnmounted(() => {
@@ -198,6 +212,18 @@ onUnmounted(() => {
       </div>
       
       <div class="header-right">
+        <div class="env-tabs">
+          <button
+            class="env-tab"
+            :class="{ active: selectedEnv === 'prod', prod: selectedEnv === 'prod' }"
+            @click="selectedEnv = 'prod'; fetchDashboardStatus()"
+          >🔴 正式機</button>
+          <button
+            class="env-tab"
+            :class="{ active: selectedEnv === 'dev', dev: selectedEnv === 'dev' }"
+            @click="selectedEnv = 'dev'; fetchDashboardStatus()"
+          >🟢 測試機</button>
+        </div>
         <div class="poll-select">
             <el-icon class="poll-icon"><Timer /></el-icon>
             <el-select v-model="pollInterval" size="small" style="width: 110px">
@@ -209,19 +235,20 @@ onUnmounted(() => {
         <el-button type="primary" plain size="small" :icon="Refresh" @click="handleManualRefresh">
             手動刷新
         </el-button>
+
       </div>
     </div>
 
     <div class="project-grid" v-loading="dashboardLoading" element-loading-background="rgba(0, 0, 0, 0.3)">
-      <div 
-        v-for="proj in projects" 
-        :key="proj.name" 
+      <div
+        v-for="proj in projects"
+        :key="proj.scriptName"
         class="glass-card project-card"
         :class="{ 'is-error': proj.blueStatus !== 200 || proj.greenStatus !== 200 }"
-        @click="goToDetail(proj.name)"
+        @click="goToDetail(proj)"
       >
         <div class="card-header">
-          <span class="proj-name">{{ proj.name }}</span>
+          <span class="proj-name">{{ proj.displayName }}</span>
           <div class="status-group">
             <div class="node-dot" :class="proj.blueStatus === 200 ? 'online' : 'offline'">B</div>
             <div class="node-dot" :class="proj.greenStatus === 200 ? 'online' : 'offline'">G</div>
@@ -261,7 +288,12 @@ onUnmounted(() => {
                 <el-form-item label="專案名稱">
                     <el-select v-model="searchForm.name" placeholder="全部專案" clearable style="width:140px">
                         <el-option label="全部" value="" />
-                        <el-option v-for="name in projectNames" :key="name" :label="name" :value="name" />
+                        <el-option
+                            v-for="p in allProjects"
+                            :key="p.scriptName || p.name"
+                            :label="p.displayName || p.name"
+                            :value="p.scriptName || p.name"
+                        />
                     </el-select>
                 </el-form-item>
 
@@ -332,6 +364,14 @@ onUnmounted(() => {
 .overview-container { padding: 10px; }
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
 .header-right { display: flex; align-items: center; gap: 15px; }
+.env-tabs { display: flex; gap: 4px; }
+.env-tab {
+    padding: 4px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.15);
+    background: rgba(15,23,42,0.6); color: #94a3b8; font-size: 13px; cursor: pointer;
+    transition: all 0.2s;
+}
+.env-tab.active.prod { background: rgba(239,68,68,0.2); border-color: #ef4444; color: #fca5a5; }
+.env-tab.active.dev  { background: rgba(74,222,128,0.2); border-color: #4ade80; color: #86efac; }
 .poll-select { display: flex; align-items: center; gap: 8px; color: var(--text-sub); font-size: 13px; }
 .poll-icon { font-size: 16px; color: var(--primary-color); }
 .title { 

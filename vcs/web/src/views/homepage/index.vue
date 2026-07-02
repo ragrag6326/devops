@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import {
   Promotion, Check, CircleClose, FolderOpened,
@@ -7,6 +7,7 @@ import {
 } from '@element-plus/icons-vue';
 import request from '@/utils/request';
 import { getMrReviewDetail } from '@/api/mrReview';
+import { getProjectList } from '@/api/project';
 
 const router = useRouter();
 
@@ -118,21 +119,29 @@ const resumeBgCarousel = () => {
 };
 
 // --- Release Note ---
-const activeTab = ref('tkbgoapi_dev');
-const releaseNotes = ref({
-  tkbgoapi_dev: '',
-  tkbgoapi_prod: '',
-  tkbtv_dev: '',
-  tkbtv_prod: ''
-});
+const allProjects = ref([])
+// sources 由 DB 動態產生：hasProd=1 加 prod tab，hasDev=1 加 dev tab
+const sources = computed(() => {
+  const list = []
+  allProjects.value.forEach(p => {
+    if (p.hasDev)  list.push({ key: `${p.name}_dev`,  name: p.name, env: 'dev',  label: p.displayName || p.name, url: '/version/getReleaseNote', params: { projectName: p.name, env: 'dev'  } })
+    if (p.hasProd) list.push({ key: `${p.name}_prod`, name: p.name, env: 'prod', label: p.displayName || p.name, url: '/version/getReleaseNote', params: { projectName: p.name, env: 'prod' } })
+  })
+  return list
+})
+const activeTab = ref('');
+const releaseNotes = ref({});
 const loading = ref(false);
 
-const sources = [
-  { key: 'tkbgoapi_dev', name: 'tkbgoapi', env: 'dev', url: '/version/getReleaseNote', params: { projectName: 'tkbgoapi', env: 'dev' } },
-  { key: 'tkbgoapi_prod', name: 'tkbgoapi', env: 'prod', url: '/version/getReleaseNote', params: { projectName: 'tkbgoapi', env: 'prod' } },
-  { key: 'tkbtv_dev', name: 'tkbtv', env: 'dev', url: '/version/getReleaseNote', params: { projectName: 'tkbtv', env: 'dev' } },
-  { key: 'tkbtv_prod', name: 'tkbtv', env: 'prod', url: '/version/getReleaseNote', params: { projectName: 'tkbtv', env: 'prod' } }
-];
+// sources 載入後初始化 activeTab 與 releaseNotes
+watch(sources, (list) => {
+  if (list.length && !activeTab.value) {
+    activeTab.value = list[0].key
+  }
+  list.forEach(s => {
+    if (!(s.key in releaseNotes.value)) releaseNotes.value[s.key] = ''
+  })
+}, { immediate: true })
 
 const formatMarkdown = (text) => {
   if (!text) return '<div class="empty-note">尚無發布紀錄</div>';
@@ -235,9 +244,12 @@ const refreshData = async () => {
   loading.value = false;
 };
 
-onMounted(() => {
+onMounted(async () => {
   initBgCarousel();
   scheduleNextBg();
+  // 先載入專案清單，sources computed 才有資料
+  const res = await getProjectList()
+  if (res.code === 1) allProjects.value = res.data || []
   fetchReleaseNotes();
   fetchPendingMRs();
 });
@@ -340,7 +352,7 @@ onUnmounted(() => clearBgTimer());
           <el-tabs v-model="activeTab" class="custom-tabs">
             <el-tab-pane v-for="source in sources" :key="source.key" :name="source.key">
               <template #label>
-                <span>{{ source.name }} ({{ source.env }})</span>
+                <span>{{ source.label }} ({{ source.env }})</span>
                 <el-badge
                   v-if="mrDataMap[source.name]?.count > 0"
                   :value="mrDataMap[source.name].count"

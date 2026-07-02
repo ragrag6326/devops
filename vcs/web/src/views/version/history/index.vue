@@ -11,6 +11,7 @@ import {
   renewimage,
   deleteImage
 } from "@/api/monitor";
+import { getProjectList, getSystemEnv } from "@/api/project";
 
 import { ElMessage , ElMessageBox , ElLoading, sliderContextKey } from 'element-plus'
 import axios from 'axios';
@@ -26,24 +27,38 @@ const loading = ref(false)
 // 1. 從本地存儲獲取角色（建議給予預設值防止 null）
 const current_role = ref(localStorage.getItem('current_role') || 'GUEST');
 
-// 2. 定義專案分類（方便維護）
-const frontendProjects = ['go_nuxt'];
-const backendProjects = ['tkbgoapi', 'tkbtv'];
+// 2. 專案清單（從後端動態取得）
+const allProjects = ref([])
+const currentServerEnv = ref('')  // 當前機器環境 (dev / prod)
+
+// 3. 由 allProjects 計算出各分類清單
+const frontendProjects = computed(() =>
+    allProjects.value.filter(p => p.category === 'frontend').map(p => p.name)
+)
+const backendProjects = computed(() =>
+    allProjects.value.filter(p => p.category === 'backend').map(p => p.name)
+)
+const FRONTEND_IMAGE_PROJECTS = computed(() => frontendProjects.value)
+const BACKEND_IMAGE_PROJECTS = computed(() => backendProjects.value)
+
+const projectNameOptions = computed(() =>
+    allProjects.value.map(p => ({ label: p.displayName || p.name, value: p.name }))
+)
 
 const filteredProjectOptions = computed(() => {
-    return projectNameOptions.filter(option => {
+    return projectNameOptions.value.filter(option => {
 
         // A. 如果是管理員，全看
         if (current_role.value === 'ADMIN') return true;
 
         // B. 前端使用者判斷
         if (current_role.value === 'FRONTEND_USER') {
-            return frontendProjects.includes(option.value);
+            return frontendProjects.value.includes(option.value);
         }
 
         // C. 後端使用者判斷
         if (current_role.value === 'BACKEND_USER') {
-            return backendProjects.includes(option.value);
+            return backendProjects.value.includes(option.value);
         }
 
         // D. 其他角色預設看不到任何專案（或根據需求調整）
@@ -90,7 +105,8 @@ watch(() => rollbackForm.value.projectName, async (newVal) => {
 
     try {
         // 發送 PATCH 請求
-        const res = await getRollBackImageVersion(newVal);
+        // liveViewEnv 決定要查哪台機器的可選版本
+        const res = await getRollBackImageVersion(liveViewEnv.value, newVal);
         
         if (res.code === 1) {
             rollbackData.value = res.data; // 將回傳的陣列存入
@@ -145,6 +161,7 @@ const submitRollback = async () => {
 
             // 呼叫更新 API
             const res = await renewimage({
+                env: liveViewEnv.value,
                 opertaionName : currentUser,
                 projectName: projectName,
                 nodeType: type, // 'prod' 或 'backup'
@@ -169,31 +186,46 @@ const submitRollback = async () => {
 // -------------------------------------------
 
 // --- 目前機器版本看板 ---
-const NODE_SUFFIXES = ['backup', 'prod', 'dev', 'local']
-const NODE_ORDER = { prod: 0, backup: 1, dev: 2, local: 3 }
+const NODE_SUFFIXES = ['backup', 'prod', 'dev', 'local', 'test', 'blue', 'green']
+const NODE_ORDER = { prod: 0, admin: 0, backup: 1, dev: 2, test: 2, local: 3, blue: 4, green: 5 }
 
 const parseImageLine = (line) => {
   const colon = line.lastIndexOf(':')
   if (colon === -1) {
-    return { projectName: line, nodeType: null, version: '未知', raw: line, fullString: line }
+    return { projectName: line, nodeType: null, version: '未知', raw: line, fullString: line, repoEnv: null }
   }
-  const raw = line.slice(0, colon)
-  const version = line.slice(colon + 1)
-  let projectName = raw
+  const raw = line.slice(0, colon)       // e.g. "frontend-admin/form-service-frontend-test"
+  const version = line.slice(colon + 1)  // e.g. "1.0.22"
+
+  // 從 repo 前綴提取環境名稱: "backend-admin" → "admin", "frontend-dev" → "dev"
+  const slashIdx = raw.indexOf('/')
+  const repoPrefix = slashIdx !== -1 ? raw.slice(0, slashIdx) : ''
+  const repoEnv = repoPrefix ? repoPrefix.split('-').slice(1).join('-') : null
+
+  // 去除 repo 前綴，只保留 imageName 部分
+  const imageWithSuffix = slashIdx !== -1 ? raw.slice(slashIdx + 1) : raw
+
+  let projectName = imageWithSuffix
   let nodeType = null
   for (const suffix of NODE_SUFFIXES) {
-    if (raw.endsWith(`-${suffix}`)) {
-      projectName = raw.slice(0, -(suffix.length + 1))
+    if (imageWithSuffix.endsWith(`-${suffix}`)) {
+      projectName = imageWithSuffix.slice(0, -(suffix.length + 1))
       nodeType = suffix
       break
     }
   }
-  return { projectName, nodeType, version, raw, fullString: line }
+  // image 名稱無後綴時，用 repo 前綴的 env 作為 nodeType (e.g. backend-admin → admin, backend-dev → dev)
+  if (!nodeType && repoEnv) {
+    nodeType = repoEnv
+  }
+  return { projectName, nodeType, version, raw, fullString: line, repoEnv }
 }
 
 const liveImageLines = ref([])
 const liveImageSet = ref(new Set())
 const liveLoading = ref(false)
+// liveViewEnv: 目前 live board 顯示哪台機器的資料（'prod' | 'dev'），預設由 currentServerEnv 決定
+const liveViewEnv = ref('prod')
 
 const groupedLiveProjects = computed(() => {
   const map = {}
@@ -216,14 +248,14 @@ const groupedLiveProjects = computed(() => {
 })
 
 const nodeTypeLabel = (type) => {
-  const map = { prod: '正式', backup: '備援', dev: '通用', local: '通用' }
-  return map[type] || '通用'
+  const map = { prod: '正式', admin: '正式', backup: '備援', dev: '測試', test: '測試', local: '通用', blue: 'Blue', green: 'Green' }
+  return map[type] || type || '通用'
 }
 
 const chipClass = (type) => {
-  if (type === 'prod') return 'chip-prod'
+  if (type === 'prod' || type === 'admin') return 'chip-prod'
   if (type === 'backup') return 'chip-backup'
-  if (type === 'dev') return 'chip-dev'
+  if (type === 'dev' || type === 'test') return 'chip-dev'
   if (type === 'local') return 'chip-local'
   return 'chip-none'
 }
@@ -231,12 +263,14 @@ const chipClass = (type) => {
 const fetchLiveVersions = async () => {
   liveLoading.value = true
   try {
-    const res = await getImageVersionByType('current')
+    // 傳入 liveViewEnv (prod/dev)，後端腳本會 SSH 到對應機器取容器版本
+    const res = await getImageVersionByType(liveViewEnv.value, 'current')
     if (res.code === 1 && Array.isArray(res.data)) {
       liveImageLines.value = res.data.map(parseImageLine)
       liveImageSet.value = new Set(res.data)
     } else {
       ElMessage.warning(res.msg || '取得版本資訊失敗')
+      liveImageLines.value = []
     }
   } catch {
     ElMessage.error('無法連線後端，請確認伺服器狀態')
@@ -245,9 +279,14 @@ const fetchLiveVersions = async () => {
   }
 }
 
+// 切換 live board 顯示哪個環境（prod | dev），並立即重新整理
+const switchLiveViewEnv = async (env) => {
+  liveViewEnv.value = env
+  await fetchLiveVersions()
+}
+
 // --- 移除 Image ---
-const FRONTEND_IMAGE_PROJECTS = ['go_nuxt']
-const BACKEND_IMAGE_PROJECTS = ['tkbgoapi', 'tkbtv', 'form-service']
+// FRONTEND_IMAGE_PROJECTS / BACKEND_IMAGE_PROJECTS 已改為由 allProjects 動態計算（見上方 computed）
 
 const removeDialogVisible = ref(false)
 const removeCategory = ref('')
@@ -267,7 +306,7 @@ const removeNodeTagClass = (nodeType) => {
 const filteredHistoryImages = computed(() => {
   if (!removeCategory.value || historyImageLines.value.length === 0) return []
   const allowed = new Set(
-    removeCategory.value === 'frontend' ? FRONTEND_IMAGE_PROJECTS : BACKEND_IMAGE_PROJECTS
+    removeCategory.value === 'frontend' ? FRONTEND_IMAGE_PROJECTS.value : BACKEND_IMAGE_PROJECTS.value
   )
   return historyImageLines.value
     .map((line) => ({ ...parseImageLine(line), isCurrent: liveImageSet.value.has(line) }))
@@ -291,7 +330,7 @@ watch(() => removeCategory.value, async (category) => {
   historyImageLines.value = []
   removeListLoading.value = true
   try {
-    const res = await getImageVersionByType('history')
+    const res = await getImageVersionByType(liveViewEnv.value, 'history')
     if (res.code === 1 && Array.isArray(res.data)) {
       historyImageLines.value = res.data
     } else {
@@ -304,18 +343,17 @@ watch(() => removeCategory.value, async (category) => {
   }
 })
 
-const buildRemoveImagePath = (version) => {
-  const prefix = removeCategory.value === 'frontend' ? 'frontend-prod' : 'backend-prod'
-  return `${prefix}/${version}`
-}
+// fullString 本身已包含完整 repo 前綴 (e.g. frontend-admin/form-service-frontend-test:1.0.22)
+// 直接使用，無需再重組路徑
+const buildRemoveImagePath = (fullString) => fullString
 
 const isDeleteSuccess = (res) => res?.data === '刪除成功'
 
-const toggleImageSelection = (version, isCurrent) => {
+const toggleImageSelection = (fullString, isCurrent) => {
   if (isCurrent) return
-  const idx = selectedImageVersions.value.indexOf(version)
+  const idx = selectedImageVersions.value.indexOf(fullString)
   if (idx >= 0) selectedImageVersions.value.splice(idx, 1)
-  else selectedImageVersions.value.push(version)
+  else selectedImageVersions.value.push(fullString)
 }
 
 const submitRemoveImages = async () => {
@@ -339,7 +377,7 @@ const submitRemoveImages = async () => {
   for (const version of selectedImageVersions.value) {
     const imagePath = buildRemoveImagePath(version)
     try {
-      const res = await deleteImage(imagePath)
+      const res = await deleteImage(liveViewEnv.value, imagePath)
       if (isDeleteSuccess(res)) successCount++
       else failures.push({ name: version, reason: res?.data || res?.msg || '未知錯誤' })
     } catch {
@@ -353,7 +391,7 @@ const submitRemoveImages = async () => {
     failures.forEach(({ name, reason }) => {
       ElMessage.error({ message: `移除失敗：${name}（${reason}）`, duration: 5000 })
     })
-    const res = await getImageVersionByType('history').catch(() => null)
+    const res = await getImageVersionByType(liveViewEnv.value, 'history').catch(() => null)
     if (res?.code === 1 && Array.isArray(res.data)) historyImageLines.value = res.data
     selectedImageVersions.value = []
   } else {
@@ -362,12 +400,7 @@ const submitRemoveImages = async () => {
   }
 }
 
-// 搜索欄
-const projectNameOptions = [
-    { label: "tkbgoapi", value: "tkbgoapi" },
-    { label: "tkbtv", value: "tkbtv" },
-    { label: "go_nuxt", value: "go_nuxt" },
-]
+// 搜索欄（projectNameOptions 已改為由 allProjects 動態計算）
 
 const projectEnvOptions = [
     { label: "prod", value: "prod" },
@@ -513,12 +546,25 @@ const deployTypeOptions = [
     { label: "Backup (備援)", value: "backup" },
 ]
 
+/**
+ * 將 UI 選擇的 env (prod|dev) 對應到專案實際使用的 Jenkins env 名稱
+ * 例如 form-service-frontend: prod → admin, dev → dev
+ */
+const resolveEnv = (projectName, uiEnv) => {
+    const proj = allProjects.value.find(p => p.name === projectName)
+    console.log('[resolveEnv]', projectName, uiEnv, '→ proj:', JSON.stringify(proj))
+    if (!proj) return uiEnv
+    if (uiEnv === 'prod' && proj.prodEnv) return proj.prodEnv
+    if (uiEnv === 'dev'  && proj.devEnv)  return proj.devEnv
+    return uiEnv
+}
+
 // 監聽表單中 env 變化
 watch(() => versionForm.value.env, async (newEnv) => {
-    
+
     // 防呆：如果沒選專案，先不動作
     if (!versionForm.value.name) return;
-    
+
     const projectName = versionForm.value.name;
 
     try {
@@ -526,22 +572,19 @@ watch(() => versionForm.value.env, async (newEnv) => {
         // 如選擇的是 Dev 
         // ===============
         if (newEnv === 'dev') {
-            // 呼叫 /next 接口，取得 Dev 的下一個版號 (e.g. 1.0.20 -> 1.0.21)
-            const res = await getNextVersion(projectName , 'dev'); // 假設這是您的 /api/version/next
+            const res = await getNextVersion(projectName, resolveEnv(projectName, 'dev'))
             if (res.code === 1) {
-                versionForm.value.version = res.data; // 自動填入 1.0.21
-                versionForm.value.branch = 'develop'; // 自動帶入分支
-                ElMessage.success(`已自動帶入 dev 部屬成功版本: ${res.data}`);
+                versionForm.value.version = res.data
+                versionForm.value.branch = 'develop'
+                ElMessage.success(`已自動帶入 dev 部屬成功版本: ${res.data}`)
             }
-        } 
+        }
         // ================
         // 如選擇的是 Prod
         // ================
         else if (newEnv === 'prod') {
-            // Prod 的版號來源，必須是 "Dev 最後成功的版本"
-            // 這裡發送請求查 Dev 的 latest-success
-            const devLatestRes = await getNextVersion(projectName, 'dev');
-            const devVer = devLatestRes.data; //  1.0.20
+            const devLatestRes = await getNextVersion(projectName, resolveEnv(projectName, 'dev'))
+            const devVer = devLatestRes.data
 
             if (!devVer) {
                 ElMessage.error("Dev 尚無版本，無法部署 Prod");
@@ -550,7 +593,7 @@ watch(() => versionForm.value.env, async (newEnv) => {
             }
 
             // 防呆：檢查 Prod 是否已經跟上這個版本了
-            const prodLatestRes = await getNextVersion(projectName, 'prod');
+            const prodLatestRes = await getNextVersion(projectName, resolveEnv(projectName, 'prod'));
             const prodVer = prodLatestRes.data; // 1.0.20 或 1.0.19
 
             // 如果 Dev (1.0.20) == Prod (1.0.20)
@@ -593,21 +636,25 @@ watch(() => versionForm.value.deployType, async () => {
     const dateStr = `${year}/${month}/${day}`;
     
     try {
+        // 優先用 DB defaultBranch，無設定則 fallback 到 master
+        const proj = allProjects.value.find(p => p.name === versionForm.value.name)
+        const defaultBranch = proj?.defaultBranch || 'master'
+
         // ===============
         // 如選擇的是 backup
         // ===============
         if (deployType === 'backup') {
             ElMessage.success(`備註已自動填入`);
             versionForm.value.remark = `${dateStr} 備援機更新, 版號: ${version}`;
-            versionForm.value.branch = 'master';
-        } 
+            versionForm.value.branch = defaultBranch;
+        }
         // ================
         // 如選擇的是 Prod
         // ================
         else if (deployType === 'prod') {
             ElMessage.success(`備註已自動填入`);
             versionForm.value.remark = `${dateStr} 正式機更新, 版號: ${version}`;
-            versionForm.value.branch = 'master';
+            versionForm.value.branch = defaultBranch;
         }
     } catch (e) {
         console.error(e);
@@ -619,7 +666,17 @@ const rules = {
     name: [{ required: true, message: "請選擇專案", trigger: "change" }],
     env: [{ required: true, message: "請選擇環境", trigger: "change" }],
     branch: [{ required: true, message: "請輸入分支", trigger: "change" }],
-    deployType: [{ required: true, message: "請選擇部署類型", trigger: "change" }],
+    deployType: [{
+        validator: (rule, value, callback) => {
+            const needDeploy = versionForm.value.env === 'prod' && frontendProjects.value.includes(versionForm.value.name)
+            if (needDeploy && !value) {
+                callback(new Error('請選擇部署類型'))
+            } else {
+                callback()
+            }
+        },
+        trigger: "change"
+    }],
     version: [
         { required: true, message: "請輸版號 格式: 1.0.0", trigger: "change" },
         { pattern: /^[\d]{1}\.[\d]+\.[\d]+$/ , message: '請輸入有效的版號 範例: 1.0.0', trigger: 'blur'}
@@ -792,11 +849,14 @@ const submitVersionAddandEdit = async () => {
                     try{
                         // 解構賦值
                         const { name: projectName, env: projectEnv, version , deployType } = versionForm.value;
+                        // 將 UI env (prod|dev) 對應到此專案實際的 Jenkins env 名稱
+                        // 例如 form-service: prod → admin
+                        const actualEnv = resolveEnv(projectName, projectEnv)
 
                         // ==============================
                         // 步驟 1: 檢查是否可部署 (Check)
                         // =============================
-                        const checkResult = await checkDeployable(projectName, projectEnv, version);
+                        const checkResult = await checkDeployable(projectName, actualEnv, version);
                         console.log('checkDeployable API回傳結果:', checkResult);
 
                         if (!checkResult.code) {
@@ -810,7 +870,7 @@ const submitVersionAddandEdit = async () => {
                         // 構建 DTO (Data Transfer Object)
                         const deployParams = {
                             projectName,
-                            projectEnv,
+                            projectEnv: actualEnv,
                             version,
                             nodeType : deployType,
                             user: 'Web-UI',
@@ -844,33 +904,42 @@ const submitVersionAddandEdit = async () => {
                         // ==========================================
                         // 步驟 3: 觸發 Jenkins (Trigger Jenkins)
                         // ==========================================
-                        const frontendProjects = ['go_nuxt'];
-
                         let jenkinsResult;
-                        let jenkinsEnv = projectEnv;
+                        let jenkinsEnv = actualEnv;
                         let type;
-                        
+                        const proj = allProjects.value.find(p => p.name === projectName)
+                        const hasCustomEnv = proj && proj.prodEnv  // 有自訂 env 的專案跳過 prod-backup 邏輯
+
+                        // 依 env + deployType 選對應欄位（jenkins_job_name_prod/backup/dev）
+                        const resolveJenkinsJob = (p, env, dType) => {
+                            if (!p) return { jobName: null, token: null }
+                            if (env === 'dev')      return { jobName: p.jenkinsJobNameDev    || null, token: p.jenkinsTokenDev    || null }
+                            if (dType === 'backup') return { jobName: p.jenkinsJobNameBackup || null, token: p.jenkinsTokenBackup || p.jenkinsTokenProd || null }
+                            return                         { jobName: p.jenkinsJobNameProd   || null, token: p.jenkinsTokenProd   || null }
+                        }
+                        const { jobName: jobNameOverride, token: tokenOverride } = resolveJenkinsJob(proj, projectEnv, deployType)
+
                         // 判斷：如果專案名稱在前端清單中，呼叫前端 API；否則呼叫後端 API
-                        if (frontendProjects.includes(projectName)) {
+                        if (frontendProjects.value.includes(projectName)) {
                             type = 'frontend'
-                            console.log("前端");
-                            
-                            if (projectEnv === 'prod' && deployType === 'backup') {
-                                jenkinsEnv = 'prod-backup';
+
+                            // 有明確 job name 時直接用，否則才用 env 後綴區分 prod-backup
+                            if (!jobNameOverride && !hasCustomEnv) {
+                                if (projectEnv === 'prod' && deployType === 'backup') {
+                                    jenkinsEnv = 'prod-backup'
+                                }
+                                if (projectEnv === 'prod' && deployType === 'prod') {
+                                    jenkinsEnv = 'prod'
+                                }
                             }
 
-                            if (projectEnv === 'prod' && deployType === 'prod') {
-                                jenkinsEnv = 'prod';
-                            }
+                            console.log(`[部署資訊] 專案:${projectName} | 類型:${type} | 環境:${jenkinsEnv} | Job:${jobNameOverride || `${type}-${jenkinsEnv}`}`)
+                            jenkinsResult = await triggerJenkinsBuild(projectName, jenkinsEnv, versionForm.value.branch, type, jobNameOverride, tokenOverride)
 
-                            console.log(`[部署資訊] 專案:${projectName} | 類型:${type} | 環境參數:${jenkinsEnv}`);
-                            
-                            jenkinsResult = await triggerJenkinsBuild(projectName, jenkinsEnv, versionForm.value.branch , type);
-                            
                         } else {
                             type = 'backend'
-                            console.log(`檢測到後端專案: ${projectName}，觸發 ${type} Jenkins Job`);
-                            jenkinsResult = await triggerJenkinsBuild(projectName, projectEnv, versionForm.value.branch , type );
+                            console.log(`[部署資訊] 專案:${projectName} | 類型:${type} | 環境:${actualEnv} | Job:${jobNameOverride || `${type}-${actualEnv}`}`)
+                            jenkinsResult = await triggerJenkinsBuild(projectName, actualEnv, versionForm.value.branch, type, jobNameOverride, tokenOverride)
                         }
 
                         if (jenkinsResult.status !== 201) {
@@ -985,22 +1054,22 @@ const handleViewLog = async (row) => {
     let pipeline_link = ""
 
 
-    if ( row.projectName == 'go_nuxt') {
-        jobName="frontend-"
-    } else {
-        jobName="backend-"
-    }
+    const rowProj = allProjects.value.find(p => p.name === row.projectName)
+    const typePrefix = frontendProjects.value.includes(row.projectName) ? 'frontend' : 'backend'
 
-    if ( row.projectEnv == 'dev') {
-        jobName=`${jobName}dev`
+    if (row.projectEnv === 'dev') {
+        // dev job：優先用 jenkinsJobNameDev，否則 fallback {type}-dev
+        jobName = rowProj?.jenkinsJobNameDev || `${typePrefix}-dev`
     } else {
-        pipelineName=`${jobName}pipeline`
-        if (row.nodeType != null &&  row.nodeType == 'backup'){
-            jobName=`${jobName}prod-${row.nodeType}`
+        // prod job：依 nodeType 選對應欄位
+        if (row.nodeType === 'backup') {
+            jobName = rowProj?.jenkinsJobNameBackup || `${typePrefix}-prod-backup`
         } else {
-            jobName=`${jobName}prod`
+            jobName = rowProj?.jenkinsJobNameProd || `${typePrefix}-prod`
         }
-        pipeline_link = await getJenkinsPiplineNumber(pipelineName , jobName , buildId);
+        // pipeline：優先用 DB jenkinsPipelineName，否則用 {type}-pipeline
+        pipelineName = rowProj?.jenkinsPipelineName || `${typePrefix}-pipeline`
+        pipeline_link = await getJenkinsPiplineNumber(pipelineName, jobName, buildId)
     }
 
     if (pipeline_link && pipeline_link.url) {
@@ -1200,17 +1269,44 @@ const customStyles = {
 };
 
 
-// ------------------------------------------------------------------------------------------- 
+// -------------------------------------------------------------------------------------------
 // 獲取 token
 const getToken = () => {
     token.value = localStorage.getItem('jwt_token')
 }
 
-// ------------------------------------------------------------------------------------------- 
+// -------------------------------------------------------------------------------------------
+// 初始化：從後端取得專案清單 & 當前環境
+const initProjectsAndEnv = async () => {
+    try {
+        const [projectRes, envRes] = await Promise.all([
+            getProjectList(),
+            getSystemEnv()
+        ])
+        if (projectRes.code === 1) {
+            allProjects.value = projectRes.data || []
+        }
+        if (envRes.code === 1) {
+            currentServerEnv.value = envRes.data?.env || 'dev'
+            // live board 預設顯示本機環境
+            liveViewEnv.value = currentServerEnv.value
+            // 若搜尋欄環境未設定，預設帶入當前機器環境
+            if (!searchForm.value.env) {
+                searchForm.value.env = currentServerEnv.value
+            }
+        }
+    } catch (e) {
+        console.error('初始化專案/環境失敗', e)
+    }
+}
 
-onMounted (() => {
-    search();
+// -------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------
+
+onMounted (async () => {
     getToken();
+    await initProjectsAndEnv();
+    search();
     fetchLiveVersions();
 })
 
@@ -1221,16 +1317,33 @@ onMounted (() => {
     <div class="version-history-page">
     <div class="page-header">
         <div>
-            <h1 class="page-title-main">版本歷史查詢</h1>
+            <div style="display:flex; align-items:center; gap:10px;">
+                <h1 class="page-title-main">版本歷史查詢</h1>
+                <span
+                    :style="{
+                        padding: '3px 12px',
+                        borderRadius: '12px',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        background: liveViewEnv === 'prod' ? '#fff1f0' : '#f0f9eb',
+                        color: liveViewEnv === 'prod' ? '#cf1322' : '#389e0d',
+                        border: `1px solid ${liveViewEnv === 'prod' ? '#ffa39e' : '#b7eb8f'}`
+                    }"
+                >
+                    {{ liveViewEnv === 'prod' ? '🔴 正式環境' : '🟢 測試環境' }}
+                </span>
+            </div>
             <p class="page-subtitle">查詢各專案部署紀錄，並即時掌握後端容器 image 版本（4 服務 · 5 節點）</p>
         </div>
-        <button class="refresh-live-btn" :disabled="liveLoading" @click="fetchLiveVersions">
-            <svg :class="{ 'spin-icon': liveLoading }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-                <polyline points="23 4 23 10 17 10" />
-                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-            </svg>
-            重新整理
-        </button>
+        <div style="display:flex; gap:8px; align-items:center;">
+            <button class="refresh-live-btn" :disabled="liveLoading" @click="fetchLiveVersions">
+                <svg :class="{ 'spin-icon': liveLoading }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                    <polyline points="23 4 23 10 17 10" />
+                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                </svg>
+                重新整理
+            </button>
+        </div>
     </div>
 
     <div class="live-version-board">
@@ -1240,6 +1353,27 @@ onMounted (() => {
                 <span class="lvb-title">目前機器版本</span>
                 <span class="lvb-source">backend image</span>
                 <span v-if="groupedLiveProjects.length" class="lvb-count">{{ groupedLiveProjects.length }} 專案</span>
+                <!-- 環境切換 tab -->
+                <div style="display:inline-flex; margin-left:14px; border:1px solid #e0e0e0; border-radius:6px; overflow:hidden; font-size:12px;">
+                    <button
+                        @click="switchLiveViewEnv('prod')"
+                        :style="{
+                            padding:'3px 12px', border:'none', cursor:'pointer',
+                            background: liveViewEnv === 'prod' ? '#cf1322' : '#f5f5f5',
+                            color: liveViewEnv === 'prod' ? '#fff' : '#666',
+                            fontWeight: liveViewEnv === 'prod' ? 600 : 400
+                        }"
+                    >正式機</button>
+                    <button
+                        @click="switchLiveViewEnv('dev')"
+                        :style="{
+                            padding:'3px 12px', border:'none', cursor:'pointer',
+                            background: liveViewEnv === 'dev' ? '#389e0d' : '#f5f5f5',
+                            color: liveViewEnv === 'dev' ? '#fff' : '#666',
+                            fontWeight: liveViewEnv === 'dev' ? 600 : 400
+                        }"
+                    >測試機</button>
+                </div>
             </div>
             <div class="lvb-actions">
                 <button class="lvb-action-btn rollback-btn" @click="handleOpenRollback">
@@ -1306,6 +1440,7 @@ onMounted (() => {
             <el-form-item label="專案名稱">
                 <el-select v-model="searchForm.name" placeholder="全部" clearable style="width:120px">
                     <el-option  v-for="name in projectNameOptions" :key="name.value" :label="name.label" :value="name.value" />
+                    <!-- projectNameOptions 為 computed，由後端 /api/project/list 動態取得 -->
                 </el-select>
             </el-form-item>
             
@@ -1523,17 +1658,17 @@ onMounted (() => {
                     v-for="item in filteredHistoryImages"
                     :key="item.fullString"
                     class="ri-item"
-                    :class="{ 'is-current': item.isCurrent, 'is-selected': selectedImageVersions.includes(item.version) }"
-                    @click.prevent="toggleImageSelection(item.version, item.isCurrent)"
+                    :class="{ 'is-current': item.isCurrent, 'is-selected': selectedImageVersions.includes(item.fullString) }"
+                    @click.prevent="toggleImageSelection(item.fullString, item.isCurrent)"
                 >
                     <input
                         type="checkbox"
                         class="ri-checkbox"
-                        :value="item.version"
-                        :checked="selectedImageVersions.includes(item.version)"
+                        :value="item.fullString"
+                        :checked="selectedImageVersions.includes(item.fullString)"
                         :disabled="item.isCurrent"
                         @click.stop
-                        @change="toggleImageSelection(item.version, item.isCurrent)"
+                        @change="toggleImageSelection(item.fullString, item.isCurrent)"
                     />
                     <div class="ri-item-body">
                         <div class="ri-item-top">
@@ -1595,7 +1730,7 @@ onMounted (() => {
                 </el-select>
             </el-form-item>
 
-            <el-form-item label="部署類型" prop="deployType" v-if="versionForm.env === 'prod' && versionForm.name === 'go_nuxt' ">
+            <el-form-item label="部署類型" prop="deployType" v-if="versionForm.env === 'prod' && frontendProjects.includes(versionForm.name)">
                 <el-select v-model="versionForm.deployType" placeholder="請選擇類型" style="width:50%">
                     <el-option v-for="item in deployTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
                 </el-select>
@@ -1686,6 +1821,8 @@ onMounted (() => {
             <!-- <pre id="terminal-content" class="terminal-body">{{ logContent }}</pre> -->
         </div>
     </el-dialog>
+
+
 
     </div>
 </template>

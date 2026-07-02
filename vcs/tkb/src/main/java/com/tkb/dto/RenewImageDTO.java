@@ -8,6 +8,9 @@ import lombok.Data;
 @Schema(description = "更新image請求參數物件")
 public class RenewImageDTO {
 
+    @Schema(description = "環境 prod | dev", example = "prod")
+    private String env;
+
     @Schema(description = "操作人員", example = "admin")
     private String opertaionName;
 

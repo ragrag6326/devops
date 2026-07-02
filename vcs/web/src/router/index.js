@@ -10,9 +10,11 @@ import LoginView from '../views/login/index.vue'
 // 監控模塊
 import MonitorOverview from '../views/system/monitor/MonitorOverview.vue'
 import MonitorView from '../views/system/monitor/MonitorDetail.vue'
+import ProjectManage from '../views/system/project/index.vue'
 // log 分析
 import LogAnalysisView from '../views/system/log/index.vue'
 import LogQueryView from '../views/system/log_query/index.vue'
+import RelaxView from '../views/relax/index.vue'
 
 import LayoutView from '../views/layout/index.vue'
 
@@ -32,6 +34,7 @@ const router = createRouter({
         {path: '/version/history',name: 'VersionHistory',component: VersionHistoryView , meta: { title: '版本歷史查詢' , keepAlive: true}},
         {path: '/mr/history',name: 'MRHistory',component: MRHistoryView , meta: { title: 'MR歷史查詢' , keepAlive: true }},
         {path: '/mr/review',name: 'MRReview',component: MRReviewView , meta: { title: 'MR AI 程式碼審核' , keepAlive: true }},
+        {path: '/relax',name: 'Relax',component: RelaxView , meta: { title: '上班累了看這邊' }},
         {path: '/user/list',name: 'UserList',component: UserListView , meta: { title: '用戶查詢' , keepAlive: true }},
       
         {
@@ -53,10 +56,16 @@ const router = createRouter({
           meta: { title: '日誌查詢' }
         },
         {
-          path: '/system/log', 
+          path: '/system/log',
           name: 'LogAnalysisView',
-          component: LogAnalysisView, 
+          component: LogAnalysisView,
           meta: { title: '日誌智能分析' }
+        },
+        {
+          path: '/system/project',
+          name: 'ProjectManage',
+          component: ProjectManage,
+          meta: { title: '專案管理' }
         }
       ]
     },

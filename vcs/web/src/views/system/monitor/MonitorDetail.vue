@@ -11,6 +11,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 
 const route = useRoute()
 const projectName = computed(() => route.params.projectName)
+// env 從路由 query 取得，預設 prod
+const env = computed(() => route.query.env || 'prod')
 
 const currentUser = ref('');
 
@@ -35,10 +37,10 @@ const loadData = async () => {
     data.value.loading = true
     try {
         const [hBlue, hGreen, tLive, tHeader] = await Promise.all([
-            healthCheck(projectName.value, 'blue'),
-            healthCheck(projectName.value, 'green'),
-            getCurrentTraffic(projectName.value, 'live'),
-            getCurrentTraffic(projectName.value, 'header')
+            healthCheck(env.value, projectName.value, 'blue'),
+            healthCheck(env.value, projectName.value, 'green'),
+            getCurrentTraffic(env.value, projectName.value, 'live'),
+            getCurrentTraffic(env.value, projectName.value, 'header')
         ])
         data.value.blueHealth = hBlue.data
         data.value.greenHealth = hGreen.data
@@ -71,7 +73,7 @@ const execSwitch = async (target) => {
             }
         )
 
-        const res = await switchTraffic( currentUser.value ,projectName.value, target.toLowerCase(), data.value.switchMode)
+        const res = await switchTraffic(env.value, currentUser.value, projectName.value, target.toLowerCase(), data.value.switchMode)
         if (res.code === 1) {
             ElMessage.success(`操作完成: ${res.data}`)
             loadData() // 刷新視圖
@@ -109,7 +111,7 @@ const handleSafeRestart = async (target) => {
 
             // 1. 自動切換流量
             data.value.loading = true;
-            const switchRes = await switchTraffic(currentUser.value ,projectName.value, alternative, '');
+            const switchRes = await switchTraffic(env.value, currentUser.value, projectName.value, alternative, '');
             if (switchRes.code !== 1) throw new Error("自動切換失敗，終止重啟");
             
             ElMessage.success(`流量已切換至 ${alternative.toUpperCase()}，準備重啟...`);
@@ -140,7 +142,7 @@ const executeRestartAPI = async (target) => {
     data.value.loading = true;
     try {
         // restartService 重啟服務
-        const res = await restartService( currentUser.value , projectName.value, target);
+        const res = await restartService(env.value, currentUser.value, projectName.value, target);
         
         // API 延遲
         await new Promise(r => setTimeout(r, 10000));

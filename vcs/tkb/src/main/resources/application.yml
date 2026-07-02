@@ -29,8 +29,6 @@ gitlab:
   url: "http://192.168.1.35/api/v4"
   token: "glpat-RNWpFjH1gjuAx8Z4NI7iHm86MQp1OnkH.01.0w1jy1uvp" #2026/12/28 過期
   projects:
-    - name: test
-      id: 40857903
     - name: tkbgoapi
       id: 13
     - name: tkbtv
@@ -58,4 +56,9 @@ springdoc:
   swagger-ui:
     url: /v3/api-docs
     path: /swagger-ui.html
+
+# 當前機器環境標識：測試機設 dev，正式機設 prod
+app:
+  env: dev
+  tools-base-path: /opt/vcs/tools
 

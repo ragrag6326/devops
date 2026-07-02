@@ -130,3 +130,31 @@ CREATE TABLE `user` (
 
 INSERT INTO `user` (`username`, `password`, `name`, `role`) VALUES
 ('admin', 'admin', '系統管理員', 'ADMIN');
+
+
+-- vcs.project_config definition
+
+CREATE TABLE `project_config` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `name` varchar(64) NOT NULL COMMENT '系統名稱，對應 project_versions.project_name',
+  `display_name` varchar(128) NOT NULL COMMENT '前端顯示名稱',
+  `description` varchar(255) DEFAULT NULL COMMENT '專案描述',
+  `gitlab_project_id` bigint DEFAULT NULL COMMENT 'GitLab Project ID',
+  `category` varchar(32) NOT NULL DEFAULT 'backend' COMMENT 'frontend / backend',
+  `is_active` tinyint(1) NOT NULL DEFAULT '1' COMMENT '1=啟用 0=停用',
+  `sort_order` int NOT NULL DEFAULT '99' COMMENT '排序，數字越小越前',
+  `script_name` varchar(64) DEFAULT NULL COMMENT 'tools/ 下的目錄名稱，NULL 時使用 name',
+  `image_keyword` varchar(64) DEFAULT NULL COMMENT 'docker image 過濾關鍵字，對應 config.sh IMAGE_KEYWORD，null 時使用 name',
+  `prod_env` varchar(32) DEFAULT NULL COMMENT 'Jenkins 正式 env 名稱，null 時用 prod',
+  `dev_env` varchar(32) DEFAULT NULL COMMENT 'Jenkins 測試 env 名稱，null 時用 dev',
+  `has_prod` tinyint(1) NOT NULL DEFAULT '1' COMMENT '是否部署於正式機',
+  `has_dev` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否部署於測試機',
+  `created_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `jenkins_job_name` varchar(100) DEFAULT NULL COMMENT 'Jenkins Job 名稱 (null 時用 {type}-{env})',
+  `jenkins_token` varchar(200) DEFAULT NULL COMMENT 'Jenkins Token (null 時用 {env}-yjjnoXvHXUE16TAmBzP4)',
+  `jenkins_pipeline_name` varchar(100) DEFAULT NULL COMMENT 'Jenkins Pipeline Job 名稱 (null 時用 {type}-pipeline)',
+  `default_branch` varchar(50) DEFAULT NULL COMMENT '預設部署分支 (null 時用 master)',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_name` (`name`)
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='專案設定';

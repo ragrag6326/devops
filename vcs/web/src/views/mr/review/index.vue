@@ -8,12 +8,13 @@ import {
   scanMrReviewProject,
   scanMrReviewAll
 } from '@/api/mrReview'
+import { getProjectList } from '@/api/project'
 
 const loading = ref(false)
 const scanning = ref(false)
 const tableData = ref([])
 const total = ref(0)
-const projectOptions = ['tkbgoapi', 'tkbtv', 'go_nuxt', 'test']
+const projectOptions = ref([])  // 從 DB 動態載入
 
 const queryParams = reactive({
   page: 1,
@@ -101,7 +102,13 @@ const renderText = (text) => {
     .replace(/\n/gim, '<br>')
 }
 
-onMounted(fetchData)
+onMounted(async () => {
+  const res = await getProjectList()
+  if (res.code === 1) {
+    projectOptions.value = (res.data || []).map(p => ({ label: p.displayName || p.name, value: p.name }))
+  }
+  fetchData()
+})
 </script>
 
 <template>
@@ -113,7 +120,7 @@ onMounted(fetchData)
       </div>
       <div class="action-box">
         <el-select v-model="queryParams.projectName" placeholder="專案" clearable style="width: 140px">
-          <el-option v-for="p in projectOptions" :key="p" :label="p" :value="p" />
+          <el-option v-for="p in projectOptions" :key="p.value" :label="p.label" :value="p.value" />
         </el-select>
         <el-select v-model="queryParams.reviewStatus" placeholder="審核狀態" clearable style="width: 130px">
           <el-option label="審核中" value="PENDING" />

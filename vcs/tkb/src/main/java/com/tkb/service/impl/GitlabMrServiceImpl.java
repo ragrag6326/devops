@@ -13,8 +13,10 @@ import com.tkb.api.gitlab.GitlabApiClient;
 import com.tkb.api.gitlab.dto.GitlabDto;
 import com.tkb.config.GitlabConfig;
 import com.tkb.entity.GitlabMrEntity;
+import com.tkb.entity.ProjectEntity;
 import com.tkb.mapper.GitlabMrMapper;
 import com.tkb.service.GitlabMrService;
+import com.tkb.service.ProjectService;
 import com.tkb.utils.Constant.GitlabReleaseState;
 import com.tkb.vo.PageBean;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +35,23 @@ public class GitlabMrServiceImpl extends ServiceImpl<GitlabMrMapper, GitlabMrEnt
 
     private final GitlabApiClient gitlabApiClient;
     private final GitlabConfig gitlabConfig;
+    private final ProjectService projectService;
+
+    /** 判斷傳入的 env 是否為該專案的「dev-like」環境 */
+    private boolean isDevEnv(String projectName, String env) {
+        ProjectEntity proj = projectService.findByName(projectName);
+        String actual = (proj != null && proj.getDevEnv() != null && !proj.getDevEnv().isBlank())
+                ? proj.getDevEnv() : "dev";
+        return actual.equalsIgnoreCase(env) || "dev".equalsIgnoreCase(env);
+    }
+
+    /** 判斷傳入的 env 是否為該專案的「prod-like」環境 */
+    private boolean isProdEnv(String projectName, String env) {
+        ProjectEntity proj = projectService.findByName(projectName);
+        String actual = (proj != null && proj.getProdEnv() != null && !proj.getProdEnv().isBlank())
+                ? proj.getProdEnv() : "prod";
+        return actual.equalsIgnoreCase(env) || "prod".equalsIgnoreCase(env);
+    }
 
 
 
@@ -101,10 +120,10 @@ public class GitlabMrServiceImpl extends ServiceImpl<GitlabMrMapper, GitlabMrEnt
                 //.between(GitlabMrEntity::getMergedAt, start, end)
                 .orderByAsc(GitlabMrEntity::getMergedAt); // 依照合併時間排序
 
-        if ("dev".equalsIgnoreCase(env)) {
+        if (isDevEnv(projectName, env)) {
             // DEV：只挑還沒發過 DEV 的 MR
             qw.eq(GitlabMrEntity::getReleasedDev, GitlabReleaseState.FALSE.getCode());
-        } else if ("prod".equalsIgnoreCase(env)) {
+        } else if (isProdEnv(projectName, env)) {
             // PROD：只挑「已發 DEV、尚未發 PROD」的 MR
             qw.eq(GitlabMrEntity::getReleasedDev, GitlabReleaseState.TRUE.getCode())
               .eq(GitlabMrEntity::getReleasedProd, GitlabReleaseState.FALSE.getCode());
@@ -130,10 +149,10 @@ public class GitlabMrServiceImpl extends ServiceImpl<GitlabMrMapper, GitlabMrEnt
         uw.eq(GitlabMrEntity::getProjectName, projectName)
                 .in(GitlabMrEntity::getId, mrEntityIds);
 
-        if ("dev".equalsIgnoreCase(env)) {
+        if (isDevEnv(projectName, env)) {
             uw.set(GitlabMrEntity::getVersionDev, version)
                     .set(GitlabMrEntity::getReleasedDev, GitlabReleaseState.TRUE.getCode());
-        } else if ("prod".equalsIgnoreCase(env)) {
+        } else if (isProdEnv(projectName, env)) {
             uw.set(GitlabMrEntity::getVersionProd, version)
                     .set(GitlabMrEntity::getReleasedProd, GitlabReleaseState.TRUE.getCode());
         }
@@ -147,12 +166,12 @@ public class GitlabMrServiceImpl extends ServiceImpl<GitlabMrMapper, GitlabMrEnt
         LambdaUpdateChainWrapper<GitlabMrEntity> uw = this.lambdaUpdate()
                 .eq(GitlabMrEntity::getProjectName, projectName);
 
-        if ("dev".equalsIgnoreCase(env)) {
+        if (isDevEnv(projectName, env)) {
             uw.eq(GitlabMrEntity::getVersionDev, version)
                     .set(GitlabMrEntity::getVersionDev, null)
                     .set(GitlabMrEntity::getReleasedDev, GitlabReleaseState.FALSE.getCode());
 
-        } else if ("prod".equalsIgnoreCase(env)) {
+        } else if (isProdEnv(projectName, env)) {
             uw.eq(GitlabMrEntity::getVersionProd, version)
                     .set(GitlabMrEntity::getVersionProd, null)
                     .set(GitlabMrEntity::getReleasedProd, GitlabReleaseState.FALSE.getCode());

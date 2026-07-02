@@ -1,55 +1,56 @@
 import request from "@/utils/request";
 
 
-/** 
+/**
  * getCurrentTraffic
- * @param {string} projectName 
-  * @param {string} trafficType     live / header
-  * @returns   projectName=tv type=header  "data": "GREEN_ACTIVE"
+ * @param {string} env           prod | dev
+ * @param {string} projectName
+ * @param {string} trafficType   live / header
+ * @returns   "BLUE_ACTIVE" | "GREEN_ACTIVE"
  */
-export function getCurrentTraffic(projectName, trafficType) {
-  return request.get(`/monitor/traffic/${projectName}/${trafficType}`);
+export function getCurrentTraffic(env, projectName, trafficType) {
+  return request.get(`/monitor/traffic/${projectName}/${trafficType}`, { params: { env } });
 }
 
-/** 
+/**
  * 服務健康檢查
+ * @param {string} env      prod | dev
  * @param {string} projectName 專案名稱
-  * @param {string} nodeType 節點類型 (blue / green)
-  * @returns
+ * @param {string} nodeType 節點類型 (blue / green)
  */
-export function healthCheck(projectName, nodeType) {
-  return request.get(`/monitor/health/${projectName}/${nodeType}` , {
-    timeout: 20000 // 設定 10 秒後超時 
+export function healthCheck(env, projectName, nodeType) {
+  return request.get(`/monitor/health/${projectName}/${nodeType}`, {
+    params: { env },
+    timeout: 20000
   });
 }
 
-/** 
+/**
  * 切換流量指向 (藍綠切換)
+ * @param {string} env           prod | dev
  * @param {string} opertaionName 操作人員
-  * @param {string} projectName 專案名稱
-  * @param {string} nodeType 節點類型 (通常填 blue 或 green)
-  * @param {string} mode 切換正式或header ( 正式為空即可 )
-  * @returns
+ * @param {string} projectName   專案名稱
+ * @param {string} nodeType      blue | green
+ * @param {string} mode          header | '' (正式)
  */
-export function switchTraffic(opertaionName, projectName, nodeType, mode) {
-  return request.patch(`/monitor/switchTraffic?opertaionName=${opertaionName}&projectName=${projectName}&nodeType=${nodeType}&mode=${mode}`);
+export function switchTraffic(env, opertaionName, projectName, nodeType, mode) {
+  return request.patch(
+    `/monitor/switchTraffic?env=${env}&opertaionName=${opertaionName}&projectName=${projectName}&nodeType=${nodeType}&mode=${mode}`
+  );
 }
 
-
-/** 
+/**
  * 重啟服務節點
+ * @param {string} env           prod | dev
  * @param {string} opertaionName 操作人員
-  * @param {string} projectName 專案名稱
-  * @param {string} target 重啟目標 (blue / green)
-  * @returns
+ * @param {string} projectName   專案名稱
+ * @param {string} target        blue | green
  */
-export function restartService(opertaionName, projectName, target) {
+export function restartService(env, opertaionName, projectName, target) {
   return request.post(
-    `/monitor/restart?opertaionName=${opertaionName}&projectName=${projectName}&target=${target}`,
+    `/monitor/restart?env=${env}&opertaionName=${opertaionName}&projectName=${projectName}&target=${target}`,
     {},
-    {
-      timeout: 30000 //  設定 30 秒超時 (預設通常是 5 或 10 秒)
-    }
+    { timeout: 30000 }
   );
 }
 
@@ -76,34 +77,42 @@ export function getImageVersion(projectName) {
   return request.get(`/monitor/getImageVersion?projectName=${projectName}`);
 }
 
-/** 取得目前運行中或歷史 image 清單 (current | history) */
-export function getImageVersionByType(type) {
-  return request.get(`/monitor/getImageVersion/${type}`);
+/**
+ * 取得目前運行中或歷史 image 清單
+ * @param {string} env  prod | dev
+ * @param {string} type current | history
+ */
+export function getImageVersionByType(env, type) {
+  return request.get(`/monitor/getImageVersion/${type}`, { params: { env } });
 }
 
-/** 退版用：取得專案可選版本清單 */
-export function getRollBackImageVersion(projectName) {
-  return request.get('/monitor/getRollBackImageVersion', { params: { projectName } });
+/**
+ * 退版用：取得專案可選版本清單
+ * @param {string} env         prod | dev
+ * @param {string} projectName 專案名稱
+ */
+export function getRollBackImageVersion(env, projectName) {
+  return request.get('/monitor/getRollBackImageVersion', { params: { env, projectName } });
 }
 
-/** 移除 Docker image */
-export function deleteImage(imageName) {
-  return request.get('/monitor/deleteImage', { params: { imageName } });
+/**
+ * 移除 Docker image
+ * @param {string} env       prod | dev
+ * @param {string} imageName 完整 image 路徑
+ */
+export function deleteImage(env, imageName) {
+  return request.get('/monitor/deleteImage', { params: { env, imageName } });
 }
 
-/** 
- * 6.0.6 版本號更新
- * @param {object} params 更新image請求參數物件
- * @param {string} params.opertaionName 操作人員
- * @param {string} params.projectName 專案名稱
- * @param {string} params.nodeType 類型
- * @param {string} params.version 部屬版號
- * @returns
+/**
+ * 6.0.6 版本號更新 (退版)
+ * @param {object} params
+ * @param {string} params.env          prod | dev
+ * @param {string} params.opertaionName
+ * @param {string} params.projectName
+ * @param {string} params.nodeType     prod | backup
+ * @param {string} params.version      1.0.0
  */
 export function renewimage(params) {
-  return request.post(`/monitor/renewImage`, params,
-    {
-      timeout: 10000 //  設定 10 秒超時
-    }
-  );
+  return request.post('/monitor/renewImage', params, { timeout: 10000 });
 }

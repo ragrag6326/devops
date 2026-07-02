@@ -9,7 +9,9 @@ import com.tkb.mapper.VersionMapper;
 import com.tkb.utils.Constant.DeployState;
 import com.tkb.utils.Version.VersionUtil;
 import com.tkb.utils.result.Result;
+import com.tkb.entity.ProjectEntity;
 import com.tkb.service.GitlabMrService;
+import com.tkb.service.ProjectService;
 import com.tkb.service.VersionService;
 import com.tkb.vo.PageBean;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +29,7 @@ import java.util.stream.Collectors;
 public class VersionServiceImpl extends ServiceImpl<VersionMapper, VersionEntity> implements VersionService {
 
     private final GitlabMrService gitlabMrService;
+    private final ProjectService projectService;
 
     @Override
     public Result<String> saveNewVersion(VersionEntity version) {
@@ -356,18 +359,30 @@ public class VersionServiceImpl extends ServiceImpl<VersionMapper, VersionEntity
     @Override
     public Result<String> checkdeployable(String projectName, String env , String targetVersion) {
 
-        // 1. 取得該專案在 Dev 和 Prod 的最新成功版號
-        String lastDevVer = this.getNextVersion(projectName, "dev").getData();
-        String lastProdVer = this.getNextVersion(projectName, "prod").getData();
+        // 解析該專案的實際 dev/prod env 名稱（例如 form-service 的 prod 實際是 "admin"）
+        ProjectEntity project = projectService.findByName(projectName);
+        String actualProdEnv = (project != null && project.getProdEnv() != null && !project.getProdEnv().isBlank())
+                ? project.getProdEnv() : "prod";
+        String actualDevEnv  = (project != null && project.getDevEnv()  != null && !project.getDevEnv().isBlank())
+                ? project.getDevEnv()  : "dev";
+
+        // 判斷傳入 env 屬於 prod-like 還是 dev-like
+        boolean isProd = env.equals(actualProdEnv) || "prod".equals(env);
+        boolean isDev  = env.equals(actualDevEnv)  || "dev".equals(env);
+
+        // 用實際 env 名稱查各環境最新成功版號
+        String lastDevVer  = this.getNextVersion(projectName, actualDevEnv).getData();
+        String lastProdVer = this.getNextVersion(projectName, actualProdEnv).getData();
+
+        log.info("checkdeployable project={} env={} actualProdEnv={} actualDevEnv={} lastDevVer={} lastProdVer={}",
+                projectName, env, actualProdEnv, actualDevEnv, lastDevVer, lastProdVer);
 
         // =====================
         // 情境 A: 目標環境是 Dev
         // =====================
-        if ("dev".equals(env)) {
-            // Dev 永遠可以在前面，回傳 OK
-            if ( targetVersion != null && !targetVersion.isEmpty()) {
-                // 1.0.1 - 1.0.1 >= 0 才可更新
-                int i = compareVersions( targetVersion,lastDevVer );
+        if (isDev) {
+            if (targetVersion != null && !targetVersion.isEmpty()) {
+                int i = compareVersions(targetVersion, lastDevVer);
                 if (i >= 0) {
                     return Result.success("Dev 環境允許更新");
                 }
@@ -378,32 +393,24 @@ public class VersionServiceImpl extends ServiceImpl<VersionMapper, VersionEntity
         // =======================
         // 情境 B: 目標環境是 Prod
         // ======================
-        if ("prod".equals(env)) {
+        if (isProd) {
 
             // 1. 如果 Dev 尚未有版號，Prod 無法部屬
             if (lastDevVer == null) {
                 return Result.error("禁止部署：Dev 環境尚未有任何成功版本，無法部署 Prod");
             }
 
-            // 2. 檢查：Dev 必須領先 Prod
-            // 如果 Prod 已經追上 Dev (相等)，代表沒有新功能可以發
-//            if (lastProdVer != null && compareVersions(lastDevVer, lastProdVer) <= 0) {
-//                return Result.error("無需更新：Prod (" + lastProdVer + ") 已與 Dev 同步，請先更新 Dev");
-//            }
-
-            // 3. (如果有傳入 targetVersion) 檢查：Prod 不能超越 Dev
+            // 2. (如果有傳入 targetVersion) 檢查：Prod 必須是往前更新 (Target >= Prod)
             if (targetVersion != null && !targetVersion.isEmpty()) {
-                // 如果 想發的版號 > Dev最後版號 -> 違規
-                //if (compareVersions(targetVersion, lastDevVer) > 0) {
-                //    return Result.error("非法操作：目標版本 " + targetVersion + " 超前 Dev (" + lastDevVer + ")，請先部署 Dev");
-                //}
-
-                // 檢查：Prod 必須是往前更新無法往回 (Target > Prod) 1.0.8 - 1.0.8 >= 0 才可更新
-                if (lastProdVer != null && compareVersions( targetVersion,lastProdVer ) >= 0) {
+                if (lastProdVer != null && compareVersions(targetVersion, lastProdVer) >= 0) {
                     return Result.success("檢查通過：有新的 Dev 版本可供 Prod 更新");
                 }
+                // lastProdVer 為 null 代表 Prod 尚無版本，直接允許
+                if (lastProdVer == null) {
+                    return Result.success("檢查通過：Prod 尚無版本，允許首次部署");
+                }
             }
-            return Result.error("版本錯誤：目標版本: "+ targetVersion + " 必須大於當前 Prod 版本 " + lastProdVer);
+            return Result.error("版本錯誤：目標版本: " + targetVersion + " 必須大於當前 Prod 版本 " + lastProdVer);
         }
         return Result.error("未知環境設定");
     }

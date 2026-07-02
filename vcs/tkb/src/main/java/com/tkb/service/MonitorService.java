@@ -15,23 +15,41 @@ import java.util.List;
 public interface MonitorService extends IService<SystemAudLogEntity> {
 
     /** 映射 0/1 為 200/404 */
-    int healthCheck(String projectName, String nodeType);
+    int healthCheck(String env, String projectName, String nodeType);
 
-    String getTraffic(String projectName, String trafficType);
+    String getTraffic(String env, String projectName, String trafficType);
 
-    String switchTraffic(String opertaionName, String projectName ,String nodeType, String mode);
+    String switchTraffic(String env, String opertaionName, String projectName, String nodeType, String mode);
 
-    String restartService(String opertaionName, String projectName, String target);
+    String restartService(String env, String opertaionName, String projectName, String target);
 
     PageBean page(Integer page, Integer pageSize, String projectName, String status, LocalDate startDate, LocalDate endDate);
 
-    List<ImageInfoDTO> getDockerImageVersions(String projectName);
+    /**
+     * 退版用：取得指定專案在指定環境可選的版本清單
+     * 腳本：manage_images.sh {env} history
+     */
+    List<ImageInfoDTO> getDockerImageVersions(String env, String projectName);
 
-    List<String> getDockerImageVersion(String type);
+    /**
+     * 取得指定環境目前運行中或歷史的 image 清單
+     * 腳本：manage_images.sh {env} {type}
+     *
+     * @param env  prod 或 dev
+     * @param type current 或 history
+     */
+    List<String> getDockerImageVersion(String env, String type);
 
-    List<ImageInfoDTO> getRollBackImageVersions(String projectName);
+    /**
+     * 退版可選版本，委派 getDockerImageVersions
+     */
+    List<ImageInfoDTO> getRollBackImageVersions(String env, String projectName);
 
-    String deleteImage(String imageName);
+    /**
+     * 刪除指定環境上的 image
+     * 腳本：manage_images.sh {env} delete {imageName}
+     */
+    String deleteImage(String env, String imageName);
 
-    String renewImage(String opertaionName , String projectName, String nodeType, String version);
+    String renewImage(String env, String opertaionName, String projectName, String nodeType, String version);
 }

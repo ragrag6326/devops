@@ -294,28 +294,28 @@ onMounted(() => {
   <div class="table-container">
     <el-table :data="userList" style="width: 100%" class="custom-table" @selection-change="selectionChange">
       
-      <el-table-column v-if="isAdmin" type="selection" width="50" align="center" />
-      
-      <el-table-column prop="id" label="編號" width="80" align="center" />
-      <el-table-column prop="username" label="帳號" width="150" align="center" />
-      <el-table-column prop="name" label="姓名" width="150" align="center" />
+      <el-table-column v-if="isAdmin" type="selection" width="45" align="center" />
 
-      <el-table-column prop="role" label="角色" width="120" align="center">
+      <el-table-column prop="id" label="編號" width="60" align="center" />
+      <el-table-column prop="username" label="帳號" min-width="120" align="center" />
+      <el-table-column prop="name" label="姓名" min-width="110" align="center" />
+
+      <el-table-column prop="role" label="角色" min-width="110" align="center">
         <template #default="scope">
           <el-tag :type="scope.row.role === 'ADMIN' ? 'success' : 'info'" size="small">
-            {{ 
-              scope.row.role === 'ADMIN' ? '管理員' : 
-              scope.row.role === 'FRONTEND_USER' ? '前端使用者' : 
-              scope.row.role === 'BACKEND_USER' ? '後端使用者' : '一般使用者' 
+            {{
+              scope.row.role === 'ADMIN' ? '管理員' :
+              scope.row.role === 'FRONTEND_USER' ? '前端' :
+              scope.row.role === 'BACKEND_USER' ? '後端' : '一般'
             }}
           </el-tag>
         </template>
       </el-table-column>
 
-      <el-table-column prop="createdTime" label="創建時間" min-width="180" align="center"/>
-      <el-table-column prop="updatedTime" label="修改時間" min-width="180" align="center"/>
+      <el-table-column prop="createdTime" label="創建時間" min-width="155" align="center"/>
+      <el-table-column prop="updatedTime" label="修改時間" min-width="155" align="center"/>
 
-      <el-table-column label="操作" min-width="180" align="center">
+      <el-table-column label="操作" min-width="155" align="center">
         <template #default="scope">
           
           <el-button 

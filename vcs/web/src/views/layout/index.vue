@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter, useRoute } from 'vue-router'
 import { toggleTheme } from '@/utils/theme'
+import { mailUnreadCount } from '@/utils/mailState'
 
 const router = useRouter()
 const route = useRoute()
@@ -26,12 +27,14 @@ const menuItems = [
       { name: 'AI 程式碼審核', path: '/mr/review' },
     ]
   },
+  { name: '上班累了看這邊', path: '/relax', icon: '☕' },
   {
     name: '系統', path: '/system', icon: '⚙',
     children: [
       { name: '狀態監控', path: '/system/monitor' },
       { name: '日誌查詢', path: '/system/log_query' },
       { name: '日誌智能分析', path: '/system/log' },
+      { name: '專案管理', path: '/system/project' },
     ]
   },
   {
@@ -134,6 +137,10 @@ onMounted(() => {
           >
             <span class="nav-icon">{{ item.icon }}</span>
             <span class="nav-label">{{ item.name }}</span>
+            <span
+              v-if="item.path === '/relax' && mailUnreadCount > 0"
+              class="nav-badge"
+            >{{ mailUnreadCount }}</span>
           </div>
 
           <div v-else class="nav-group">
@@ -402,7 +409,7 @@ onMounted(() => {
   font-weight: 500;
   position: relative;
   white-space: nowrap;
-  overflow: hidden;
+  overflow: visible;
   user-select: none;
 }
 
@@ -427,6 +434,33 @@ onMounted(() => {
 .nav-label {
   flex: 1;
   transition: opacity 0.2s;
+}
+
+.nav-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 99px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  flex-shrink: 0;
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.5);
+}
+
+.app-shell.sidebar-collapsed .nav-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  font-size: 9px;
 }
 
 .app-shell.sidebar-collapsed .nav-label {

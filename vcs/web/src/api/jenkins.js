@@ -17,11 +17,11 @@ const getJenkinsCrumb = () => {
   });
 };
 
-const triggerJenkinsBuild = async (projectName, env, branch , type) => {
-  // type = frontend / backend
-  // env = prod / dev
-  const JOB_NAME = `${type}-${env}`;
-  const JOB_TOKEN = `${env}-yjjnoXvHXUE16TAmBzP4`; // 這是 Job 配置裡的 Token
+const triggerJenkinsBuild = async (projectName, env, branch, type, jobNameOverride, tokenOverride) => {
+  // jobNameOverride / tokenOverride 來自 project_config.jenkins_job_name / jenkins_token
+  // 未設定時 fallback 到預設命名規則
+  const JOB_NAME  = jobNameOverride  || `${type}-${env}`;
+  const JOB_TOKEN = tokenOverride    || `${env}-yjjnoXvHXUE16TAmBzP4`;
 
   try {
     // 第一步：先拿 Crumb
