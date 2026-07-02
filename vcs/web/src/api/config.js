@@ -29,3 +29,12 @@ export const checkConfigSync = (projectName, dto) =>
  */
 export const syncConfigToRemote = (projectName) =>
     request.post(`/config/${projectName}/sync`);
+
+/**
+ * 從其他專案複製 config.sh 內容，複製後回傳目標專案最新 DTO
+ * @param {string} targetProject  目標專案 DB name
+ * @param {string} sourceProject  來源專案 DB name
+ * @returns {ConfigShDTO}
+ */
+export const copyConfigFrom = (targetProject, sourceProject) =>
+    request.post(`/config/${targetProject}/copy-from/${sourceProject}`);

@@ -10,6 +10,7 @@
     "ansi_up": "^6.0.6",
     "axios": "^1.9.0",
     "element-plus": "^2.9.10",
+    "js-yaml": "^5.2.1",
     "markdown-it": "^14.1.0",
     "vue": "^3.2.38",
     "vue-router": "^4.1.5"

@@ -1,8 +1,9 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
+import * as yaml from 'js-yaml'
 import { Plus, Edit, Delete, Setting, Refresh, ArrowDown, Connection, Tools } from '@element-plus/icons-vue'
 import { getProjectListAll, addProject, updateProject, deleteProject, initProject } from '@/api/project'
-import { getProjectConfig, saveProjectConfig, checkConfigSync, syncConfigToRemote } from '@/api/config'
+import { getProjectConfig, saveProjectConfig, checkConfigSync, syncConfigToRemote, copyConfigFrom } from '@/api/config'
 import { getDockerCompose, saveDockerCompose } from '@/api/dockerCompose'
 import { healthCheck as monitorHealthCheck } from '@/api/monitor'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -206,6 +207,33 @@ const handleRowAction = (cmd, row) => {
   if (cmd === 'compose') handleComposeOpen(row)
 }
 
+// ── Config Copy ──────────────────────────────────────────────────────────
+const copyDialogVisible = ref(false)
+const copySourceProject = ref('')
+const copyCopying       = ref(false)
+
+const handleCopyOpen = () => {
+  copySourceProject.value = ''
+  copyDialogVisible.value = true
+}
+
+const handleCopyConfirm = async () => {
+  if (!copySourceProject.value) { ElMessage.warning('請選擇來源專案'); return }
+  copyCopying.value = true
+  try {
+    const res = await copyConfigFrom(configProjectName.value, copySourceProject.value)
+    if (res.code === 1) {
+      // 直接用回傳的 DTO 刷新表單，不需再發一次 GET
+      configForm.value = { prod: res.data.prod || {}, dev: res.data.dev || {}, shared: res.data.shared || {} }
+      ElMessage.success(`已從「${copySourceProject.value}」複製 config.sh`)
+      copyDialogVisible.value = false
+    } else {
+      ElMessage.error(res.msg || '複製失敗')
+    }
+  } catch { ElMessage.error('複製失敗') }
+  finally { copyCopying.value = false }
+}
+
 // ── Config Sync ───────────────────────────────────────────────────────────
 const syncDialogVisible = ref(false)
 const syncChecking      = ref(false)
@@ -256,16 +284,64 @@ const composeProjectRow    = ref(null)
 const composeEnv           = ref('prod')
 const composeContent       = ref('')
 
+// YAML 驗證狀態：null=未檢查, true=通過, false=失敗
+const yamlValid = ref(null)
+const yamlError = ref('')
+
+// 內容一旦改動就重置驗證狀態，要求重新檢查才能儲存
+watch(composeContent, () => {
+  yamlValid.value = null
+  yamlError.value = ''
+})
+
+const handleYamlCheck = () => {
+  const content = composeContent.value.trim()
+  if (!content) {
+    yamlValid.value = false
+    yamlError.value = '內容不可為空'
+    return
+  }
+  // 偵測 tab 縮排（YAML 不允許）
+  const tabLine = content.split('\n').findIndex(l => /^\t/.test(l))
+  if (tabLine !== -1) {
+    yamlValid.value = false
+    yamlError.value = `第 ${tabLine + 1} 行使用了 Tab 縮排，YAML 只允許空格`
+    return
+  }
+  try {
+    const parsed = yaml.load(content)
+    if (typeof parsed !== 'object' || parsed === null) {
+      yamlValid.value = false
+      yamlError.value = 'YAML 根節點須為物件格式（key: value）'
+      return
+    }
+    if (!parsed.services) {
+      yamlValid.value = false
+      yamlError.value = '缺少 services: 區塊，請確認這是有效的 docker-compose.yml'
+      return
+    }
+    yamlValid.value = true
+    yamlError.value = ''
+  } catch (e) {
+    yamlValid.value = false
+    yamlError.value = e.message || 'YAML 格式錯誤'
+  }
+}
+
 const handleComposeOpen = (row) => {
   composeProjectRow.value = row
   composeEnv.value = row.hasProd ? 'prod' : 'dev'
   composeContent.value = ''
+  yamlValid.value = null
+  yamlError.value = ''
   composeDialogVisible.value = true
   loadCompose()
 }
 const loadCompose = async () => {
   composeLoading.value = true
   composeContent.value = ''
+  yamlValid.value = null
+  yamlError.value = ''
   try {
     const res = await getDockerCompose(composeProjectRow.value.name, composeEnv.value)
     if (res.code === 1) {
@@ -277,7 +353,7 @@ const loadCompose = async () => {
   finally { composeLoading.value = false }
 }
 const handleComposeSave = async () => {
-  if (!composeContent.value.trim()) { ElMessage.warning('內容不可為空'); return }
+  if (yamlValid.value !== true) { ElMessage.warning('請先點「檢查格式」確認 YAML 正確後再儲存'); return }
   composeSaving.value = true
   try {
     const res = await saveDockerCompose(
@@ -522,10 +598,15 @@ onMounted(fetchList)
       destroy-on-close
     >
       <div v-loading="configLoading" style="height:100%">
-        <el-alert type="info" :closable="false" style="margin-bottom:14px; font-size:13px">
-          修改後點「儲存寫入」，後端直接覆寫本機
-          <code>/opt/vcs/tools/{{ configProjectName }}/config.sh</code>，原始注解保留。
-        </el-alert>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <el-alert type="info" :closable="false" style="flex:1;font-size:13px;margin-bottom:0">
+            修改後點「儲存寫入」，後端直接覆寫本機
+            <code>/opt/vcs/tools/{{ configProjectName }}/config.sh</code>，原始注解保留。
+          </el-alert>
+          <el-button size="small" style="margin-left:10px;white-space:nowrap" @click="handleCopyOpen">
+            從其他專案複製
+          </el-button>
+        </div>
 
         <el-tabs v-model="configTab" type="border-card">
           <el-tab-pane label="正式機 PROD" name="prod">
@@ -611,7 +692,7 @@ onMounted(fetchList)
         <ul style="padding-left:20px;margin:8px 0;color:#606266;font-size:13px">
           <li>在 <code>/opt/docker_image/</code> 建立專案目錄與 <code>.env</code></li>
           <li>生成或<strong style="color:#e6a23c">覆蓋</strong> <code>deploy.sh</code>、<code>rollback.sh</code>、<code>switch_traffic.sh</code></li>
-          <li>DEV：將 service 追加至共用 <code>docker-compose.yml</code></li>
+          <li>DEV：<strong style="color:#e6a23c">docker-compose.yml</strong> 請另外添加</li>
         </ul>
         <el-alert type="warning" :closable="false" style="margin:12px 0 4px">
           初始化通常只在<strong>新增專案後執行一次</strong>。<br>
@@ -653,6 +734,38 @@ onMounted(fetchList)
       </template>
     </el-dialog>
 
+    <!-- ── 從其他專案複製 config.sh Dialog ──────────────────────────── -->
+    <el-dialog v-model="copyDialogVisible" title="從其他專案複製 config.sh" width="420px" destroy-on-close>
+      <div style="font-size:13px;color:#606266;margin-bottom:14px">
+        選擇來源專案後，其 <strong>PROD / DEV / 共用</strong> 欄位將全部複製到
+        <strong>{{ configProjectName }}</strong>，並立即覆蓋目前表單內容。
+      </div>
+      <el-select
+        v-model="copySourceProject"
+        placeholder="選擇來源專案"
+        style="width:100%"
+        filterable
+      >
+        <el-option
+          v-for="p in tableData.filter(p => p.name !== configProjectName)"
+          :key="p.name"
+          :label="`${p.displayName}（${p.name}）`"
+          :value="p.name"
+        />
+      </el-select>
+      <template #footer>
+        <el-button @click="copyDialogVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="copyCopying"
+          :disabled="!copySourceProject"
+          @click="handleCopyConfirm"
+        >
+          確認複製
+        </el-button>
+      </template>
+    </el-dialog>
+
     <!-- ── 同步 config.sh 驗證/結果 Dialog ─────────────────────────── -->
     <el-dialog v-model="syncDialogVisible" title="同步 config.sh 至遠端" width="500px" destroy-on-close>
       <!-- 驗證中 -->
@@ -660,6 +773,7 @@ onMounted(fetchList)
         <el-icon class="is-loading" style="font-size:28px"><Refresh /></el-icon>
         <div style="margin-top:8px;color:#909399">欄位驗證中…</div>
       </div>
+
 
       <!-- 驗證結果（尚未同步） -->
       <template v-else-if="syncCheckResult && !syncFinalResult">
@@ -729,18 +843,39 @@ onMounted(fetchList)
       </div>
       <div v-loading="composeLoading">
         <el-alert v-if="!composeContent && !composeLoading" type="info" :closable="false" style="margin-bottom:8px">
-          遠端尚無此檔案，儲存後將自動建立。
-        </el-alert>
-        <textarea
+          遠端尚無此 docker-compose.yml 檔案，儲存後將自動建立。</el-alert>
+        <el-input
           v-model="composeContent"
-          class="compose-editor"
-          placeholder="# docker-compose.yml 內容"
-          spellcheck="false"
+          type="textarea"
+          :rows="20"
+          placeholder="請輸入 docker-compose.yml 內容…"
+          style="font-family:monospace;font-size:13px"
         />
+        <!-- YAML 驗證結果 -->
+        <el-alert
+          v-if="yamlValid === true"
+          type="success"
+          :closable="false"
+          style="margin-top:8px"
+        >✅ YAML 格式正確，可儲存至遠端。</el-alert>
+        <el-alert
+          v-if="yamlValid === false"
+          type="error"
+          :closable="false"
+          style="margin-top:8px"
+        >❌ {{ yamlError }}</el-alert>
       </div>
       <template #footer>
         <el-button @click="composeDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="composeSaving" @click="handleComposeSave">
+        <el-button type="warning" @click="handleYamlCheck" :disabled="composeLoading || !composeContent">
+          檢查格式
+        </el-button>
+        <el-button
+          type="primary"
+          :loading="composeSaving"
+          :disabled="yamlValid !== true"
+          @click="handleComposeSave"
+        >
           儲存至遠端
         </el-button>
       </template>
@@ -750,44 +885,13 @@ onMounted(fetchList)
 </template>
 
 <style scoped>
-.pm-wrap { padding: 10px; }
 .init-output {
   margin: 0;
   white-space: pre-wrap;
   word-break: break-all;
   font-size: 12px;
-  line-height: 1.6;
-  max-height: 160px;
-  overflow-y: auto;
+  font-family: monospace;
+  color: inherit;
 }
-.compose-editor {
-  width: 100%;
-  height: 420px;
-  font-family: 'Courier New', Courier, monospace;
-  font-size: 13px;
-  line-height: 1.5;
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
-  padding: 10px;
-  resize: vertical;
-  box-sizing: border-box;
-  background: #fafafa;
-  outline: none;
-}
-.compose-editor:focus {
-  border-color: #409eff;
-  background: #fff;
-}
-.tab-form-body { padding: 4px 0 0; }
-.cfg-form .el-form-item { margin-bottom: 14px; }
-.health-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 0 10px;
-  font-size: 13px;
-}
-.health-label { color: #606266; }
-.health-ok    { color: #67c23a; font-size: 13px; }
-.health-err   { color: #f56c6c; font-size: 13px; }
 </style>
+
