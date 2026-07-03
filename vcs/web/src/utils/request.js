@@ -4,7 +4,7 @@ import router from "@/router";
 
 const request = axios.create({
     baseURL: '/api',
-    timeout: 5000,
+    timeout: 60000,
     headers: {
         'Content-Type': 'application/json'
     }
@@ -33,16 +33,20 @@ request.interceptors.response.use(
         return response.data;
     },
     (error) => {
-        // 處理錯誤
-        if (error.response.status === 401) {
-            ElMessage.error("登入超時,請重新登錄");
-            localStorage.removeItem("jwt_token");
-            localStorage.removeItem("current_username");
-            router.push("/login");
-        } else {
-            ElMessage.error(error.response.data);
+        // error.response 在網路錯誤 / timeout 時為 undefined，需先判斷
+        if (!error.response) {
+            ElMessage.error('網路異常或請求逾時，請稍後再試');
+            return Promise.reject(error);
         }
-
+        if (error.response.status === 401) {
+            ElMessage.error('登入超時，請重新登錄');
+            localStorage.removeItem('jwt_token');
+            localStorage.removeItem('current_username');
+            router.push('/login');
+        } else {
+            const msg = error.response.data?.msg || error.response.data || '請求失敗';
+            ElMessage.error(msg);
+        }
         return Promise.reject(error);
     }
 );
