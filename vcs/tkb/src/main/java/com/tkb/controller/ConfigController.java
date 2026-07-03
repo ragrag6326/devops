@@ -82,4 +82,21 @@ public class ConfigController {
             return Result.error("同步失敗：" + e.getMessage());
         }
     }
+
+    @Operation(summary = "6.0.5 複製 config.sh",
+               description = "將 sourceProject 的 config.sh 內容複製到目標專案，複製後回傳目標最新 DTO")
+    @PostMapping("/{projectName}/copy-from/{sourceProject}")
+    public Result<ConfigShDTO> copyFrom(
+            @Parameter(description = "目標專案 DB name", required = true)
+            @PathVariable String projectName,
+            @Parameter(description = "來源專案 DB name", required = true)
+            @PathVariable String sourceProject) {
+        try {
+            ConfigShDTO dto = configShService.copyFrom(projectName, sourceProject);
+            return Result.success(dto);
+        } catch (Exception e) {
+            log.error("[ConfigController] copyFrom 失敗: {}", e.getMessage());
+            return Result.error("複製失敗：" + e.getMessage());
+        }
+    }
 }

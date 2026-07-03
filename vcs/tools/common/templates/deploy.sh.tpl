@@ -28,9 +28,18 @@ HEALTH_HOST="${PROD_HEALTH_HOST}"
 HEALTH_SCHEME="${PROD_HEALTH_SCHEME:-http}"
 HEALTH_PATH="${PROD_HEALTH_PATH:-/}"
 
+# 容器名稱從 config.sh 的陣列讀取；未設定時 fallback 至 {project}-blue/green
 PROJECT_NAME="{{PROJECT_NAME}}"
-SERVICE_BLUE="${PROJECT_NAME}-blue"
-SERVICE_GREEN="${PROJECT_NAME}-green"
+if [[ ${#PROD_BLUE_CONTAINERS[@]} -gt 0 && -n "${PROD_BLUE_CONTAINERS[0]}" ]]; then
+    SERVICE_BLUE=("${PROD_BLUE_CONTAINERS[@]}")
+else
+    SERVICE_BLUE=("${PROJECT_NAME}-blue")
+fi
+if [[ ${#PROD_GREEN_CONTAINERS[@]} -gt 0 && -n "${PROD_GREEN_CONTAINERS[0]}" ]]; then
+    SERVICE_GREEN=("${PROD_GREEN_CONTAINERS[@]}")
+else
+    SERVICE_GREEN=("${PROJECT_NAME}-green")
+fi
 # ─────────────────────────────────────────────────────────────
 
 usage() {
@@ -65,8 +74,8 @@ if [[ "$TARGET" == "blue" ]]; then
 
     cd "$BASE_PATH"
     sudo rm -rf "${BASE_PATH}/${TARGET}/webapp"
-    echo "🔃 重啟 BLUE (${SERVICE_BLUE})..."
-    docker compose up -d --force-recreate ${SERVICE_BLUE}
+    echo "🔃 重啟 BLUE (${SERVICE_BLUE[*]})..."
+    docker compose up -d --force-recreate "${SERVICE_BLUE[@]}"
     sleep 2
 
     echo "🔁 將 Header 流量切至 BLUE"
@@ -81,8 +90,8 @@ fi
 if [[ "$TARGET" == "green" ]]; then
     cd "$BASE_PATH"
     sudo rm -rf "${BASE_PATH}/${TARGET}/webapp"
-    echo "🔃 重啟 GREEN (${SERVICE_GREEN})..."
-    docker compose up -d --force-recreate ${SERVICE_GREEN}
+    echo "🔃 重啟 GREEN (${SERVICE_GREEN[*]})..."
+    docker compose up -d --force-recreate "${SERVICE_GREEN[@]}"
     sleep 2
 
     echo "🔁 將 Header 流量切至 GREEN"
@@ -92,8 +101,13 @@ if [[ "$TARGET" == "green" ]]; then
 fi
 
 # ---------------------------------------------------------
-# 健康檢查
+# 健康檢查（PROD_HEALTH_HOST 未設定時跳過）
 # ---------------------------------------------------------
+if [[ -z "$HEALTH_HOST" ]]; then
+    echo "⏭  PROD_HEALTH_HOST 未設定，跳過健康檢查，視為部署成功"
+    exit 0
+fi
+
 echo "🩺 Health Check: ${HEALTH_URL}  (HOST: ${HEALTH_HOST})"
 for i in {1..5}; do
     HTTP_STATUS=$(curl -sk -o /dev/null -w "%{http_code}" "${HEALTH_URL}" -H "HOST: ${HEALTH_HOST}")

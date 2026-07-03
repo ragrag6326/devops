@@ -1,9 +1,14 @@
 #!/bin/bash
 # =============================================================
-#  init_project.sh  [prod|dev]  <projectName>  <scriptName>
-#  由 VCS 後台呼叫，在遠端機器初始化新專案的目錄結構
+#  init_project.sh  <sshEnv>  <projectName>  <scriptName>  [initType]
 #
-#  prod:
+#  sshEnv    : prod | dev  — 決定 SSH 目標機器
+#  initType  : prod | dev  — 決定初始化邏輯（預設同 sshEnv）
+#
+#  特殊專案（如 form-service）：prod_ssh_env=dev
+#    → sshEnv=dev（SSH 打到 dev 機器）, initType=prod（執行 PROD 初始化邏輯）
+#
+#  initType=prod:
 #    - /opt/docker_image/${PROJECT}/                  確保存在
 #    - /opt/docker_image/${PROJECT}/.env              建立（若不存在）
 #    - /opt/docker_image/${PROJECT}/script/           建立
@@ -11,32 +16,37 @@
 #    - /opt/docker_image/${PROJECT}/script/rollback.sh
 #    - /opt/docker_image/${PROJECT}/script/switch_traffic.sh
 #
-#  dev:
-#    - /opt/docker_image/docker-compose.yml           追加新 service（若 service 不存在）
+#  initType=dev:
+#    - （目前保留，DEV 初始化邏輯視需求補充）
 # =============================================================
-ENV=$1
-PROJECT=$2     # DB project name（docker 目錄名）
-SCRIPT_NAME=$3 # tools/ 目錄名（可能與 PROJECT 不同）
+SSH_ENV=$1
+PROJECT=$2      # DB project name（docker 目錄名）
+SCRIPT_NAME=$3  # tools/ 目錄名（可能與 PROJECT 不同）
+INIT_TYPE=${4:-$SSH_ENV}  # 未傳則預設與 SSH_ENV 相同
 
 TOOLS_BASE="/opt/vcs/tools"
 TPL_DIR="${TOOLS_BASE}/common/templates"
 DOCKER_IMAGE_BASE="/opt/docker_image"
 
 # Validation
-[[ "$ENV" != "prod" && "$ENV" != "dev" ]] && { echo "Usage: init_project.sh [prod|dev] <project> <scriptName>"; exit 1; }
-[[ -z "$PROJECT" ]]                        && { echo "❌ projectName required"; exit 1; }
-[[ -z "$SCRIPT_NAME" ]]                    && SCRIPT_NAME="$PROJECT"
+[[ "$SSH_ENV" != "prod" && "$SSH_ENV" != "dev" ]]     && { echo "Usage: init_project.sh <sshEnv> <project> <scriptName> [initType]"; exit 1; }
+[[ "$INIT_TYPE" != "prod" && "$INIT_TYPE" != "dev" ]] && { echo "❌ initType 必須是 prod 或 dev，收到: ${INIT_TYPE}"; exit 1; }
+[[ -z "$PROJECT" ]]     && { echo "❌ projectName required"; exit 1; }
+[[ -z "$SCRIPT_NAME" ]] && SCRIPT_NAME="$PROJECT"
 
-source "${TOOLS_BASE}/utils/sshToolUtil.sh" "$ENV"
+# SSH 目標由 SSH_ENV 決定
+source "${TOOLS_BASE}/utils/sshToolUtil.sh" "$SSH_ENV"
+
+echo "▶ init_project.sh  sshEnv=${SSH_ENV}  initType=${INIT_TYPE}  project=${PROJECT}  scriptName=${SCRIPT_NAME}"
 
 # ──────────────────────────────────────────────────────────────
-# PROD：建立目錄 + 生成 scripts
+# PROD 初始化邏輯：建立目錄 + 生成 deploy/rollback/switch scripts
 # ──────────────────────────────────────────────────────────────
-if [[ "$ENV" == "prod" ]]; then
+if [[ "$INIT_TYPE" == "prod" ]]; then
     REMOTE_BASE="${DOCKER_IMAGE_BASE}/${PROJECT}"
     SCRIPT_DIR="${REMOTE_BASE}/script"
 
-    echo "▶ [PROD] 建立目錄: ${REMOTE_BASE}"
+    echo "▶ [PROD-init] 建立目錄: ${REMOTE_BASE}"
     ssh_function "mkdir -p '${SCRIPT_DIR}'"
 
     # .env（若不存在才建立）
@@ -50,7 +60,6 @@ if [[ "$ENV" == "prod" ]]; then
             continue
         fi
 
-        # 本機替換 → pipe 到遠端寫入
         CONTENT=$(sed \
             -e "s|{{PROJECT_NAME}}|${PROJECT}|g" \
             -e "s|{{SCRIPT_NAME}}|${SCRIPT_NAME}|g" \
@@ -60,53 +69,12 @@ if [[ "$ENV" == "prod" ]]; then
         echo "$CONTENT" | ssh_function "cat > '${REMOTE_SCRIPT}' && chmod +x '${REMOTE_SCRIPT}' && echo '✅ ${SCRIPT_FILE} 寫入完成'"
     done
 
-    echo "✅ [PROD] ${PROJECT} 初始化完成: ${REMOTE_BASE}"
+    echo "✅ [PROD-init] ${PROJECT} 初始化完成: ${REMOTE_BASE}"
 fi
 
 # ──────────────────────────────────────────────────────────────
-# DEV：追加 service 到共用 docker-compose.yml
+# DEV 初始化邏輯（目前保留，視需求補充）
 # ──────────────────────────────────────────────────────────────
-# if [[ "$ENV" == "dev" ]]; then
-#     DEV_COMPOSE="/opt/docker_image/docker-compose.yml"
-
-#     # 確認 compose 檔存在
-#     EXISTS=$(ssh_function "[ -f '${DEV_COMPOSE}' ] && echo yes || echo no")
-#     if [[ "$EXISTS" != "yes" ]]; then
-#         echo "❌ DEV docker-compose.yml 不存在: ${DEV_COMPOSE}"
-#         exit 1
-#     fi
-
-#     # 確認 service 是否已存在
-#     ALREADY=$(ssh_function "grep -c '^\s*${PROJECT}-blue:' '${DEV_COMPOSE}' 2>/dev/null || echo 0")
-#     if [[ "$ALREADY" -gt 0 ]]; then
-#         echo "⏭  [DEV] service '${PROJECT}-blue' 已存在於 docker-compose.yml，跳過"
-#         exit 0
-#     fi
-
-#     # 讀取 config 取得 DEV 欄位
-#     CONFIG_FILE="${TOOLS_BASE}/${SCRIPT_NAME}/config.sh"
-#     [[ ! -f "$CONFIG_FILE" ]] && { echo "⚠️  ${CONFIG_FILE} 不存在，無法生成 service 片段，請先填寫配置再重試"; exit 1; }
-#     source "$CONFIG_FILE"
-
-#     DEV_IMAGE_REPO="${DEV_IMAGE_REPO:-backend-dev}"
-#     DEV_PORT="${DEV_BLUE_CHECK_PORTS[0]:-}"
-#     DEV_DEPLOY_BASE="${DEV_DEPLOY_BASE:-/opt/docker_image}"
-
-#     SERVICE_BLOCK=$(cat <<YAML
-
-#   # ── ${PROJECT} (added by VCS init) ──
-#   ${PROJECT}-blue:
-#     image: \${REGISTRY}/${DEV_IMAGE_REPO}/\${DEV_IMAGE_KEYWORD:-${PROJECT}}:\${DEV_BLUE_VERSION:-latest}
-#     container_name: ${PROJECT}-blue
-#     restart: unless-stopped
-#     ports:
-#       - "${DEV_PORT}:${DEV_PORT}"
-#     env_file:
-#       - .env
-#     volumes:
-#       - ${DEV_DEPLOY_BASE}/${PROJECT}/blue/webapp:/app/webapp
-# YAML
-# )
-
-#     echo "$SERVICE_BLOCK" | ssh_function "cat >> '${DEV_COMPOSE}' && echo '✅ [DEV] service ${PROJECT}-blue 已追加至 docker-compose.yml'"
-# fi
+if [[ "$INIT_TYPE" == "dev" ]]; then
+    echo "⏭  [DEV-init] DEV 初始化邏輯目前無需額外操作（docker-compose 請透過編輯器維護）"
+fi

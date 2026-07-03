@@ -1,6 +1,8 @@
 package com.tkb.controller;
 
+import com.tkb.dto.ConfigShDTO;
 import com.tkb.entity.ProjectEntity;
+import com.tkb.service.ConfigShService;
 import com.tkb.service.ProjectService;
 import com.tkb.utils.ShellExecutor;
 import com.tkb.utils.result.Result;
@@ -28,13 +30,15 @@ public class DockerComposeController {
     @Value("${app.tools-base-path:/opt/vcs/tools}")
     private String toolsBasePath;
 
-    private final ProjectService projectService;
+    private final ProjectService  projectService;
+    private final ConfigShService configShService;
 
     // ── 讀取 ────────────────────────────────────────────────────────────────
 
     @Operation(summary = "7.0.1 讀取 docker-compose.yml",
-               description = "PROD: /opt/docker_image/{project}/docker-compose.yml  " +
-                             "DEV: /opt/docker_image/docker-compose.yml")
+               description = "路徑由 config.sh 的 PROD_DEPLOY_BASE / DEV_DEPLOY_BASE 推算，" +
+                             "未設定時 PROD fallback 至 /opt/docker_image/{project}/docker-compose.yml，" +
+                             "DEV fallback 至 /opt/docker_image/docker-compose.yml")
     @GetMapping("/{projectName}")
     public Result<Map<String, String>> read(
             @Parameter(description = "DB project_config.name", required = true)
@@ -123,19 +127,48 @@ public class DockerComposeController {
     }
 
     /**
-     * 決定遠端 docker-compose.yml 路徑：
-     * <ul>
-     *   <li>env=prod（含 prod_ssh_env 覆蓋至 dev）→ per-project /opt/docker_image/{name}/docker-compose.yml</li>
-     *   <li>env=dev（純 DEV 配置）→ 共用 /opt/docker_image/docker-compose.yml</li>
-     * </ul>
+     * 從 config.sh 的 PROD_DEPLOY_BASE / DEV_DEPLOY_BASE 推算 docker-compose.yml 路徑。
      *
-     * 這樣 form-service-frontend（prod_ssh_env=dev）的 PROD compose 路徑正確：
-     * SSH=dev, PATH=/opt/docker_image/form-service-frontend/docker-compose.yml
+     * <p>規則（優先讀 config.sh，找不到再 fallback）：
+     * <ol>
+     *   <li>env=prod → 讀 PROD_DEPLOY_BASE；compose = {PROD_DEPLOY_BASE}/docker-compose.yml<br>
+     *       fallback: /opt/docker_image/{projectName}/docker-compose.yml</li>
+     *   <li>env=dev  → 讀 DEV_DEPLOY_BASE；compose = {DEV_DEPLOY_BASE}/docker-compose.yml<br>
+     *       fallback: /opt/docker_image/docker-compose.yml</li>
+     * </ol>
+     *
+     * <p>form-service-frontend 範例：
+     * <ul>
+     *   <li>PROD_DEPLOY_BASE = /opt/docker_image/form-service-frontend
+     *       → /opt/docker_image/form-service-frontend/docker-compose.yml (SSH=dev)</li>
+     *   <li>DEV_DEPLOY_BASE  = /opt/docker_image/form-service-frontend  (同一檔案)
+     *       → /opt/docker_image/form-service-frontend/docker-compose.yml (SSH=dev)</li>
+     * </ul>
      */
     private String resolveComposePath(ProjectEntity proj, String env, String projectName) {
-        if ("prod".equals(env)) {
-            return "/opt/docker_image/" + projectName + "/docker-compose.yml";
+        String deployBase = null;
+        try {
+            ConfigShDTO cfg = configShService.read(projectName);
+            if ("prod".equals(env)) {
+                deployBase = cfg.getProd().getOrDefault("PROD_DEPLOY_BASE", "").trim();
+            } else {
+                deployBase = cfg.getDev().getOrDefault("DEV_DEPLOY_BASE", "").trim();
+            }
+        } catch (Exception e) {
+            log.warn("[DockerCompose] 讀取 config.sh 失敗，使用預設路徑: {}", e.getMessage());
         }
-        return "/opt/docker_image/docker-compose.yml";
+
+        if (deployBase != null && !deployBase.isBlank()) {
+            String path = deployBase + "/docker-compose.yml";
+            log.debug("[DockerCompose] composePath from config ({})={}", env, path);
+            return path;
+        }
+
+        // fallback
+        String fallback = "prod".equals(env)
+                ? "/opt/docker_image/" + projectName + "/docker-compose.yml"
+                : "/opt/docker_image/docker-compose.yml";
+        log.debug("[DockerCompose] composePath fallback ({})={}", env, fallback);
+        return fallback;
     }
 }

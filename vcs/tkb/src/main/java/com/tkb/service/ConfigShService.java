@@ -36,4 +36,14 @@ public interface ConfigShService {
      * @param projectName DB project_config.name
      */
     ConfigSyncResult syncToRemote(String projectName);
+
+    /**
+     * 將 sourceProject 的 config.sh 內容複製到 targetProject，
+     * 保留 targetProject 自己的 projectName / scriptName，
+     * 複製完成後回傳 targetProject 最新的 DTO（供前端直接刷新表單）
+     *
+     * @param targetProject 目標專案 DB name
+     * @param sourceProject 來源專案 DB name
+     */
+    ConfigShDTO copyFrom(String targetProject, String sourceProject);
 }

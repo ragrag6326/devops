@@ -208,14 +208,12 @@ public class ConfigShServiceImpl implements ConfigShService {
         m.put("PROD_DEPLOY_BASE",      "PROD 部署根目錄（PROD_DEPLOY_BASE）");
         m.put("PROD_BLUE_CHECK_PORTS", "PROD Blue 埠號（PROD_BLUE_CHECK_PORTS）");
         m.put("PROD_GREEN_CHECK_PORTS","PROD Green 埠號（PROD_GREEN_CHECK_PORTS）");
-        m.put("PROD_HEALTH_HOST",      "健康檢查主機（PROD_HEALTH_HOST）");
-        m.put("PROD_HEALTH_SCHEME",    "健康檢查協議（PROD_HEALTH_SCHEME）");
-        m.put("PROD_HEALTH_PATH",      "健康檢查路徑（PROD_HEALTH_PATH）");
         m.put("PROD_NGINX_CONF",       "Nginx 設定檔路徑（PROD_NGINX_CONF）");
         m.put("PROD_LIVE_UPSTREAM",    "正式流量 upstream（PROD_LIVE_UPSTREAM）");
         m.put("PROD_HEADER_UPSTREAM",  "Header 流量 upstream（PROD_HEADER_UPSTREAM）");
         PROD_REQUIRED = Collections.unmodifiableMap(m);
     }
+
     @Override
     public ConfigSyncResult checkSync(String projectName, ConfigShDTO dto) {
         ConfigSyncResult result = new ConfigSyncResult();
@@ -266,8 +264,8 @@ public class ConfigShServiceImpl implements ConfigShService {
         ProjectEntity proj = projectService.findByName(projectName);
         if (proj == null) { result.addError("找不到專案：" + projectName); return result; }
 
-        String scriptName = resolveScriptName(projectName);
-        String syncScript = toolsBasePath + "/common/sync_config.sh";
+        String scriptName  = resolveScriptName(projectName);
+        String syncScript  = toolsBasePath + "/common/sync_config.sh";
         String checkScript = toolsBasePath + "/common/check_remote_file.sh";
 
         // ── PROD 同步 ──────────────────────────────────────────────────────
@@ -309,6 +307,26 @@ public class ConfigShServiceImpl implements ConfigShService {
         }
 
         return result;
+    }
+
+    @Override
+    public ConfigShDTO copyFrom(String targetProject, String sourceProject) {
+        if (targetProject.equals(sourceProject))
+            throw new IllegalArgumentException("來源與目標專案相同");
+
+        ConfigShDTO source = read(sourceProject);
+
+        // 用來源的 prod/dev/shared 值覆寫目標，但保留目標自己的 projectName/scriptName
+        ConfigShDTO dto = new ConfigShDTO();
+        dto.setProjectName(targetProject);
+        dto.setScriptName(resolveScriptName(targetProject));
+        dto.setProd(new LinkedHashMap<>(source.getProd()));
+        dto.setDev(new LinkedHashMap<>(source.getDev()));
+        dto.setShared(new LinkedHashMap<>(source.getShared()));
+
+        write(targetProject, dto);
+        log.info("[ConfigSh] copyFrom {} → {}", sourceProject, targetProject);
+        return read(targetProject);
     }
 
     /** 取得專案對應的 tools 目錄名稱 */
