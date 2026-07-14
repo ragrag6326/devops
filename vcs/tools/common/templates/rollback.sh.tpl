@@ -35,7 +35,11 @@ echo "🔁 流量切回 BLUE"
 [[ -f "${SCRIPT_PATH}/${SWITCH_TRAFFIC_SCRIPT}" ]] && "${SCRIPT_PATH}/${SWITCH_TRAFFIC_SCRIPT}" blue
 
 # 2. Green 版本同步 Blue
-if [ "$BLUE_VERSION" != "$GREEN_VERSION" ]; then
+#    前端（PROD_IMAGE_REPO 以 frontend 開頭）：blue/green image 版本序列各自獨立，
+#    把 GREEN 設成 BLUE 的版號會指到不存在的 image tag，跳過同步（只切流量＋重啟）
+if [[ "${PROD_IMAGE_REPO}" == frontend* ]]; then
+    echo "⏭  前端專案：BLUE/GREEN 版本各自獨立，跳過版本同步"
+elif [ "$BLUE_VERSION" != "$GREEN_VERSION" ]; then
     echo "🔁 將 GREEN 版本恢復成與 BLUE 一致 → ${BLUE_VERSION}"
     sed -i "s|GREEN_VERSION=.*|GREEN_VERSION=${BLUE_VERSION}|g" "$ENV_FILE"
 else

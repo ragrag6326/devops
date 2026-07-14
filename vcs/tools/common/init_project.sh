@@ -29,8 +29,11 @@ TPL_DIR="${TOOLS_BASE}/common/templates"
 DOCKER_IMAGE_BASE="/opt/docker_image"
 
 # Validation
-[[ "$SSH_ENV" != "prod" && "$SSH_ENV" != "dev" ]]     && { echo "Usage: init_project.sh <sshEnv> <project> <scriptName> [initType]"; exit 1; }
-[[ "$INIT_TYPE" != "prod" && "$INIT_TYPE" != "dev" ]] && { echo "❌ initType 必須是 prod 或 dev，收到: ${INIT_TYPE}"; exit 1; }
+# SSH_ENV = 連線目標機器 → 以 ssh_hosts.json 為準（新增機器不用改本腳本）
+source "${TOOLS_BASE}/common/ssh_env.sh"
+valid_ssh_env "$SSH_ENV" || { echo "❌ 未知 sshEnv '${SSH_ENV}'，可用環境: $(list_ssh_envs)。Usage: init_project.sh <sshEnv> <project> <scriptName> [initType]"; exit 1; }
+# INIT_TYPE = 初始化「邏輯」分支，只有 prod/dev 兩種流程，與機器無關，維持寫死
+[[ "$INIT_TYPE" != "prod" && "$INIT_TYPE" != "dev" ]] && { echo "❌ initType 必須是 prod 或 dev（初始化流程種類，非機器名），收到: ${INIT_TYPE}"; exit 1; }
 [[ -z "$PROJECT" ]]     && { echo "❌ projectName required"; exit 1; }
 [[ -z "$SCRIPT_NAME" ]] && SCRIPT_NAME="$PROJECT"
 

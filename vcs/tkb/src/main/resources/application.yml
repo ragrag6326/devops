@@ -35,6 +35,10 @@ gitlab:
       id: 3
     - name: go_nuxt
       id: 17
+  # deploy.git（Jenkins buildWithParameters 用的部署腳本倉庫，http://192.168.1.35/HsuDing/deploy.git）
+  # 用來讀寫 config/project_deploy.json（部署對照表管理頁面）
+  deploy-project-id: "HsuDing%2Fdeploy"
+  deploy-branch: "v2"
 
 n8n:
   mr-review:

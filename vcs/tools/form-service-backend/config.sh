@@ -7,9 +7,9 @@
 # ---- 正式機 (prod / 132.x) ---- form-service 無 prod 環境
 PROD_BLUE_CHECK_PORTS=(8100)
 PROD_GREEN_CHECK_PORTS=(8101)
-PROD_HEALTH_HOST="formservice.tkbtv.com.tw"
+PROD_HEALTH_HOST=""
 PROD_HEALTH_SCHEME="http"
-PROD_HEALTH_PATH="/api/v1/accounts/register"
+PROD_HEALTH_PATH=""
 
 PROD_NGINX_CONF="/etc/nginx/nginx-form-service.conf"
 PROD_TRAFFIC_BLUE_PORT="8100"
@@ -20,7 +20,7 @@ PROD_BLUE_CONTAINERS="form-service-backend-blue"
 PROD_GREEN_CONTAINERS="form-service-backend-green"
 
 PROD_DEPLOY_BASE="/opt/docker_image/form-service-backend"
-PROD_SWITCH_SCRIPT=""${DEV_DEPLOY_BASE}/script/switch_traffic.sh" "
+PROD_SWITCH_SCRIPT=""${PROD_DEPLOY_BASE}/script/switch_traffic.sh" "
 PROD_IMAGE_REPO="backend-admin"
 BLUE_ENV_KEY="BLUE_VERSION"
 GREEN_ENV_KEY="GREEN_VERSION"
@@ -40,7 +40,7 @@ DEV_HEADER_UPSTREAM=""
 DEV_BLUE_CONTAINERS="form-service-backend-test"
 DEV_GREEN_CONTAINERS=""
 
-DEV_DEPLOY_BASE=""
+DEV_DEPLOY_BASE="/opt/docker_image/form-service-backend"
 DEV_SWITCH_SCRIPT=""
 DEV_IMAGE_REPO="backend-dev"
 

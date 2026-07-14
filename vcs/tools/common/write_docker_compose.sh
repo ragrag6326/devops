@@ -11,7 +11,8 @@ COMPOSE_PATH=$2
 TMP_FILE=$3
 TOOLS_BASE="/opt/vcs/tools"
 
-[[ "$SSH_ENV" != "prod" && "$SSH_ENV" != "dev" ]] && { echo "❌ sshEnv must be prod or dev"; exit 1; }
+source "${TOOLS_BASE}/common/ssh_env.sh"
+valid_ssh_env "$SSH_ENV" || { echo "❌ 未知 sshEnv '${SSH_ENV}'，可用: $(list_ssh_envs)"; exit 1; }
 [[ -z "$COMPOSE_PATH" ]]  && { echo "❌ composePath required"; exit 1; }
 [[ ! -f "$TMP_FILE" ]]    && { echo "❌ 暫存檔不存在: $TMP_FILE"; exit 1; }
 

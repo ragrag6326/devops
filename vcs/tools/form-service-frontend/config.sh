@@ -30,7 +30,7 @@ DEV_BLUE_CHECK_PORTS=(8112)
 DEV_GREEN_CHECK_PORTS=()
 DEV_HEALTH_HOST="formservice.tkbtv.com.tw"
 DEV_HEALTH_SCHEME="http"
-DEV_HEALTH_PATH=""
+DEV_HEALTH_PATH="/"
 
 DEV_NGINX_CONF="/etc/nginx/nginx-form-service.conf"
 DEV_TRAFFIC_BLUE_PORT=""

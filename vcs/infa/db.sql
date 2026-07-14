@@ -1,10 +1,8 @@
-
-
 CREATE DATABASE IF NOT EXISTS `vcs` 
 USE `vcs`;
 
-
 -- vcs.gitlab_merge_requests definition
+
 CREATE TABLE `gitlab_merge_requests` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `project_name` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '專案名稱',
@@ -26,9 +24,11 @@ CREATE TABLE `gitlab_merge_requests` (
   `updated_at` datetime NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_mr_id` (`mr_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=337 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=399 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 
 -- vcs.log_analysis definition
+
 CREATE TABLE `log_analysis` (
   `id` int NOT NULL AUTO_INCREMENT,
   `log_time` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
@@ -44,9 +44,8 @@ CREATE TABLE `log_analysis` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=36 DEFAULT CHARSET=utf8mb3;
 
-
-
 -- vcs.mr_code_reviews definition
+
 CREATE TABLE `mr_code_reviews` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `project_name` varchar(50) NOT NULL COMMENT '專案名稱（對應 application.yml gitlab.projects.name）',
@@ -69,67 +68,7 @@ CREATE TABLE `mr_code_reviews` (
   UNIQUE KEY `uk_project_mr` (`project_name`,`mr_id`),
   KEY `idx_status` (`review_status`),
   KEY `idx_project_state` (`project_name`,`state`)
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='MR AI Code Review 紀錄';
-
-
--- vcs.project_versions definition
-CREATE TABLE `project_versions` (
-  `id` bigint NOT NULL AUTO_INCREMENT,
-  `project_name` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `project_env` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '部屬環境',
-  `version` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '記錄版號:如 1.0.3',
-  `state` tinyint NOT NULL DEFAULT '0' COMMENT '狀態：0=DEPLOYING, 1=SUCCESS, 2=FAILED, 3=ROLLED_BACK',
-  `node_type` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `remark` mediumtext COLLATE utf8mb4_unicode_ci COMMENT '對該版本的描述',
-  `release_note` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
-  `jenkins_build_id` bigint DEFAULT NULL,
-  `created_by` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '觸發者 (GitLab / Jenkins / RD)',
-  `created_time` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-  `finished_time` datetime DEFAULT NULL COMMENT '成功部署或 rollback 發生時間',
-  `updated_time` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=516 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- vcs.system_aud_log definition
-
-CREATE TABLE `system_aud_log` (
-  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主鍵 ID',
-  `project_name` varchar(50) NOT NULL COMMENT '專案名稱',
-  `action` varchar(100) NOT NULL COMMENT '操作動作',
-  `operator` varchar(50) DEFAULT NULL COMMENT '操作人員',
-  `status` tinyint NOT NULL DEFAULT '1' COMMENT '狀態：0=SUCCESS, 1=FAILED',
-  `operation_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新時間',
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=66 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='系統操作日誌紀錄';
-
-
--- vcs.`user` definition
-CREATE TABLE `user` (
-  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主鍵 ID',
-  `username` varchar(50) NOT NULL COMMENT '用戶名/登入帳號',
-  `password` varchar(100) NOT NULL COMMENT '加密後的密碼',
-  `name` varchar(50) DEFAULT NULL COMMENT '用戶真實姓名',
-  `role` varchar(20) NOT NULL DEFAULT 'USER' COMMENT '角色：例如 ADMIN, USER',
-  `created_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '創建時間',
-  `updated_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新時間',
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `username` (`username`)
-) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='系統用戶表';
-
-
-CREATE TABLE `user` (
-    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主鍵 ID',
-    `username` VARCHAR(50) NOT NULL UNIQUE COMMENT '用戶名/登入帳號',
-    `password` VARCHAR(100) NOT NULL COMMENT '加密後的密碼',
-    `name` VARCHAR(50) NULL COMMENT '用戶真實姓名',
-    `role` VARCHAR(20) NOT NULL DEFAULT 'USER' COMMENT '角色：例如 ADMIN, USER',
-    `created_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '創建時間',
-    `updated_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新時間',
-    PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系統用戶表';
-
-INSERT INTO `user` (`username`, `password`, `name`, `role`) VALUES
-('admin', 'admin', '系統管理員', 'ADMIN');
+) ENGINE=InnoDB AUTO_INCREMENT=11 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='MR AI Code Review 紀錄';
 
 
 -- vcs.project_config definition
@@ -151,10 +90,61 @@ CREATE TABLE `project_config` (
   `has_dev` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否部署於測試機',
   `created_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  `jenkins_job_name` varchar(100) DEFAULT NULL COMMENT 'Jenkins Job 名稱 (null 時用 {type}-{env})',
-  `jenkins_token` varchar(200) DEFAULT NULL COMMENT 'Jenkins Token (null 時用 {env}-yjjnoXvHXUE16TAmBzP4)',
+  `jenkins_job_name_prod` varchar(255) DEFAULT NULL COMMENT 'PROD Jenkins Job 名稱',
+  `jenkins_job_name_backup` varchar(255) DEFAULT NULL COMMENT '備援(Green) Jenkins Job 名稱（前端才有）',
+  `jenkins_job_name_dev` varchar(255) DEFAULT NULL COMMENT 'DEV  Jenkins Job 名稱',
+  `jenkins_token_prod` varchar(255) DEFAULT NULL COMMENT 'PROD Jenkins Token',
+  `jenkins_token_backup` varchar(255) DEFAULT NULL COMMENT '備援(Green) Jenkins Token',
+  `jenkins_token_dev` varchar(255) DEFAULT NULL COMMENT 'DEV  Jenkins Token',
   `jenkins_pipeline_name` varchar(100) DEFAULT NULL COMMENT 'Jenkins Pipeline Job 名稱 (null 時用 {type}-pipeline)',
   `default_branch` varchar(50) DEFAULT NULL COMMENT '預設部署分支 (null 時用 master)',
+  `prod_ssh_env` varchar(10) DEFAULT NULL COMMENT 'PROD 操作實際 SSH 目標機器（null=走 prod 機，dev=走 dev 機）',
+  `dev_ssh_env` varchar(10) DEFAULT NULL COMMENT 'DEV 操作實際 SSH 目標機器（null=走 dev 機，prod=走 prod 機）',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_name` (`name`)
-) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='專案設定';
+) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='專案設定';
+
+-- vcs.project_versions definition
+
+CREATE TABLE `project_versions` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `project_name` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `project_env` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '部屬環境',
+  `version` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '記錄版號:如 1.0.3',
+  `state` tinyint NOT NULL DEFAULT '0' COMMENT '狀態：0=DEPLOYING, 1=SUCCESS, 2=FAILED, 3=ROLLED_BACK',
+  `node_type` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `remark` mediumtext COLLATE utf8mb4_unicode_ci COMMENT '對該版本的描述',
+  `release_note` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `jenkins_build_id` bigint DEFAULT NULL,
+  `created_by` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '觸發者 (GitLab / Jenkins / RD)',
+  `created_time` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `finished_time` datetime DEFAULT NULL COMMENT '成功部署或 rollback 發生時間',
+  `updated_time` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=704 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- vcs.system_aud_log definition
+
+CREATE TABLE `system_aud_log` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主鍵 ID',
+  `project_name` varchar(50) NOT NULL COMMENT '專案名稱',
+  `action` varchar(100) NOT NULL COMMENT '操作動作',
+  `operator` varchar(50) DEFAULT NULL COMMENT '操作人員',
+  `status` tinyint NOT NULL DEFAULT '1' COMMENT '狀態：0=SUCCESS, 1=FAILED',
+  `operation_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新時間',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=78 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='系統操作日誌紀錄';
+
+-- vcs.`user` definition
+
+CREATE TABLE `user` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主鍵 ID',
+  `username` varchar(50) NOT NULL COMMENT '用戶名/登入帳號',
+  `password` varchar(100) NOT NULL COMMENT '加密後的密碼',
+  `name` varchar(50) DEFAULT NULL COMMENT '用戶真實姓名',
+  `role` varchar(20) NOT NULL DEFAULT 'USER' COMMENT '角色：例如 ADMIN, USER',
+  `created_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '創建時間',
+  `updated_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新時間',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `username` (`username`)
+) ENGINE=InnoDB AUTO_INCREMENT=14 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='系統用戶表';

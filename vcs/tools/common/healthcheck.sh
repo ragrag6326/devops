@@ -1,9 +1,10 @@
 #!/bin/bash
-# Usage: healthcheck.sh [prod|dev] [project] [blue|green]
-usage() { echo "Usage: $0 [prod|dev] [project] [blue|green]"; exit 99; }
+# Usage: healthcheck.sh [env] [project] [blue|green]  （env 以 ssh_hosts.json 為準）
+usage() { echo "Usage: $0 [$(list_ssh_envs)] [project] [blue|green]"; exit 99; }
 
 ENV=$1; PROJECT=$2; NODE=$3
-[[ "$ENV"  != "prod" && "$ENV"  != "dev"   ]] && usage
+source /opt/vcs/tools/common/ssh_env.sh
+valid_ssh_env "$ENV" || usage
 [[ -z "$PROJECT" ]]                             && usage
 [[ "$NODE" != "blue" && "$NODE" != "green" ]] && usage
 

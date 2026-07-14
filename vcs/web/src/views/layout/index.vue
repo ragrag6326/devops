@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter, useRoute } from 'vue-router'
 import { toggleTheme } from '@/utils/theme'
-import { mailUnreadCount } from '@/utils/mailState'
+import { mailUnreadCount, refreshMailUnreadCount } from '@/utils/mailState'
 
 const router = useRouter()
 const route = useRoute()
@@ -35,6 +35,7 @@ const menuItems = [
       { name: '日誌查詢', path: '/system/log_query' },
       { name: '日誌智能分析', path: '/system/log' },
       { name: '專案管理', path: '/system/project' },
+      { name: '部署對照表管理', path: '/system/deploy-registry' },
     ]
   },
   {
@@ -97,6 +98,8 @@ onMounted(() => {
       expandedMenus.value[item.path] = true
     }
   })
+  // 登入後立即算出信箱未讀數，sidebar badge 不需等到進入 /relax 才顯示
+  refreshMailUnreadCount()
 })
 </script>
 

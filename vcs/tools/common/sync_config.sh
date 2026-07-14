@@ -8,7 +8,8 @@ SCRIPT_NAME=$2
 TOOLS_BASE="/opt/vcs/tools"
 CONFIG_PATH="${TOOLS_BASE}/${SCRIPT_NAME}/config.sh"
 
-[[ "$ENV" != "prod" && "$ENV" != "dev" ]] && { echo "❌ env must be prod or dev"; exit 1; }
+source "${TOOLS_BASE}/common/ssh_env.sh"
+valid_ssh_env "$ENV" || { echo "❌ 未知環境 '${ENV}'，可用: $(list_ssh_envs)"; exit 1; }
 [[ -z "$SCRIPT_NAME" ]]                    && { echo "❌ scriptName required"; exit 1; }
 [[ ! -f "$CONFIG_PATH" ]]                  && { echo "❌ 本機 config.sh 不存在: ${CONFIG_PATH}"; exit 1; }
 

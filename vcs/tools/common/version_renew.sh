@@ -3,7 +3,8 @@
 usage() { echo "Usage: $0 [prod|dev] [project] [prod|backup] [version]"; exit 1; }
 
 ENV=$1; PROJECT=$2; NODE_TYPE=$3; NEW_VERSION=$4
-[[ "$ENV"  != "prod" && "$ENV"  != "dev" ]] && usage
+source /opt/vcs/tools/common/ssh_env.sh
+valid_ssh_env "$ENV" || usage
 [[ -z "$PROJECT" || -z "$NODE_TYPE" || -z "$NEW_VERSION" ]] && usage
 
 source /opt/vcs/tools/common/init.sh   # 解析 BLUE/GREEN_CONTAINERS、DEPLOY_BASE 等

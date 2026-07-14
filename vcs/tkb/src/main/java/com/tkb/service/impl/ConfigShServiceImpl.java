@@ -33,7 +33,7 @@ public class ConfigShServiceImpl implements ConfigShService {
     private static final List<String> PROD_KEYS = List.of(
             "PROD_BLUE_CONTAINERS", "PROD_GREEN_CONTAINERS",
             "PROD_BLUE_CHECK_PORTS", "PROD_GREEN_CHECK_PORTS",
-            "PROD_NGINX_CONF", "PROD_LIVE_UPSTREAM", "PROD_HEADER_UPSTREAM",
+            "PROD_NGINX_CONF", "PROD_NGINX_EXEC", "PROD_LIVE_UPSTREAM", "PROD_HEADER_UPSTREAM",
             "PROD_TRAFFIC_BLUE_PORT",
             "PROD_DEPLOY_BASE", "PROD_SWITCH_SCRIPT",
             "PROD_HEALTH_HOST", "PROD_HEALTH_SCHEME", "PROD_HEALTH_PATH",

@@ -2,7 +2,7 @@
 import { ref, onMounted, watch } from 'vue'
 import * as yaml from 'js-yaml'
 import { Plus, Edit, Delete, Setting, Refresh, ArrowDown, Connection, Tools } from '@element-plus/icons-vue'
-import { getProjectListAll, addProject, updateProject, deleteProject, initProject } from '@/api/project'
+import { getProjectListAll, addProject, updateProject, deleteProject, initProject, getSshHosts } from '@/api/project'
 import { getProjectConfig, saveProjectConfig, checkConfigSync, syncConfigToRemote, copyConfigFrom } from '@/api/config'
 import { getDockerCompose, saveDockerCompose } from '@/api/dockerCompose'
 import { healthCheck as monitorHealthCheck } from '@/api/monitor'
@@ -52,6 +52,7 @@ const PROD_FIELDS = [
   { key: 'PROD_BLUE_CHECK_PORTS',  label: 'Blue 健檢 Port',    hint: '多個以空格分隔，如 8091 8094' },
   { key: 'PROD_GREEN_CHECK_PORTS', label: 'Green 健檢 Port',   hint: '多個以空格分隔，無則留空' },
   { key: 'PROD_NGINX_CONF',        label: 'nginx conf 路徑',   hint: '如 /etc/nginx/conf.d/tv/nginx-tv.conf' },
+  { key: 'PROD_NGINX_EXEC',        label: 'nginx 指令',        hint: '選填，留空=本機 nginx；nginx 跑在容器內填 docker exec nginx nginx（不可含 -it）' },
   { key: 'PROD_LIVE_UPSTREAM',     label: 'Live Upstream',     hint: 'nginx 正式流量 upstream' },
   { key: 'PROD_HEADER_UPSTREAM',   label: 'Header Upstream',   hint: 'nginx 測試 header upstream' },
   { key: 'PROD_TRAFFIC_BLUE_PORT', label: 'Blue 流量 Port',    hint: 'switch_traffic 用' },
@@ -384,13 +385,31 @@ const handleConfigSave = async () => {
   configSaving.value = true
   try {
     const res = await saveProjectConfig(configProjectName.value, configForm.value)
-    if (res.code === 1) { ElMessage.success('config.sh 已更新'); configDrawerVisible.value = false }
+    if (res.code === 1) { ElMessage.success('config.sh 已更新') }
     else ElMessage.error(res.msg || '儲存失敗')
   } catch { ElMessage.error('儲存失敗') }
   finally { configSaving.value = false }
 }
 
-onMounted(fetchList)
+// ── SSH 機器清單（tools/common/ssh_hosts.json，與 sshToolUtil.sh 同一份）──
+// 新增遠端機器（如 gallery）：在該 JSON 加一筆＋金鑰放 ~/.ssh/，這裡的下拉自動出現
+const sshHosts = ref([
+  { env: 'prod', host: '132.145.125.250', label: '正式機' },
+  { env: 'dev', host: '131.186.44.40', label: '測試機' },
+])
+const fetchSshHosts = async () => {
+  try {
+    const res = await getSshHosts()
+    if (res.code === 1 && Array.isArray(res.data) && res.data.length) {
+      sshHosts.value = res.data
+    }
+  } catch { /* 讀不到就用預設 prod/dev */ }
+}
+
+onMounted(() => {
+  fetchList()
+  fetchSshHosts()
+})
 </script>
 
 <template>
@@ -526,6 +545,9 @@ onMounted(fetchList)
               </el-form-item>
               <el-form-item label="正式 Env">
                 <el-input v-model="form.prodEnv" placeholder="留空預設 prod，特殊如 admin" />
+                <div class="fhint">
+                  對應 Jenkins 的 PROJECT_ENV，需存在於部署對照表頁的 vmIP.json（或該專案 envs.{ENV}.vmIP）
+                </div>
               </el-form-item>
               <el-form-item label="測試 Env">
                 <el-input v-model="form.devEnv" placeholder="留空預設 dev" />
@@ -536,15 +558,26 @@ onMounted(fetchList)
               <el-divider content-position="left" style="font-size:12px;color:#64748b">SSH 路由覆蓋</el-divider>
               <el-form-item label="PROD SSH 目標">
                 <el-select v-model="form.prodSshEnv" style="width:100%" clearable placeholder="留空 = prod 機（預設）">
-                  <el-option label="dev（走測試機）" value="dev" />
-                  <el-option label="prod（走正式機）" value="prod" />
+                  <el-option
+                    v-for="h in sshHosts"
+                    :key="h.env"
+                    :label="`${h.env}（${h.label}，${h.host}）`"
+                    :value="h.env"
+                  />
                 </el-select>
-                <div class="fhint">PROD 操作實際 SSH 目標。form-service 等全部在 dev 機的專案設為 dev</div>
+                <div class="fhint">
+                  PROD 操作實際 SSH 目標。form-service 等全部在 dev 機的專案設為 dev。
+                  機器清單來自 <code>tools/common/ssh_hosts.json</code>，新增機器請在該檔加一筆並放金鑰
+                </div>
               </el-form-item>
               <el-form-item label="DEV SSH 目標">
                 <el-select v-model="form.devSshEnv" style="width:100%" clearable placeholder="留空 = dev 機（預設）">
-                  <el-option label="prod（走正式機）" value="prod" />
-                  <el-option label="dev（走測試機）" value="dev" />
+                  <el-option
+                    v-for="h in sshHosts"
+                    :key="h.env"
+                    :label="`${h.env}（${h.label}，${h.host}）`"
+                    :value="h.env"
+                  />
                 </el-select>
                 <div class="fhint">一般不需設定</div>
               </el-form-item>

@@ -1,102 +1,12 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
-import { mailUnreadCount } from '@/utils/mailState'
+import { mailUnreadCount, mailConfig, isMessageVisible, refreshMailUnreadCount } from '@/utils/mailState'
 
 // ========== GitHub 設定 ==========
-// TODO: 改成你的 GitHub 帳號
 const GITHUB_USERNAME = 'ragrag6326/devops'
 
 // ========== 信箱設定 ==========
-// 每封信的格式：{ id, from, subject, body, startDate, days }
-//   startDate : 開始顯示的日期 (YYYY-MM-DD)
-//   days      : 從 startDate 起顯示幾天，之後自動消失
-//
-// '__all__' 底下的信件所有使用者都看得到
-// 其餘 key 填入 localStorage current_username 的值
-const mailConfig = {
-  '__all__': [
-    // 範例（預設無共用信件，可自行新增）
-    {
-      id: 'common_001',
-      from: '系統公告',
-      subject: '網站將停止維護',
-      body: '感謝TKB的大家這段時間的照顧，本站將不再維護更新。',
-      startDate: '2026-06-15',
-      days: 7
-    }
-  ],
-  // 針對特定使用者的信件 ──────────────────────────────
-  'tkb0005696': [
-    {
-      id: 'specify000',
-      from: '管理員',
-      subject: '測試用',
-      body: '感謝你的付出，專案已順利完成 🎉',
-      startDate: '2026-06-18',
-      days: 30
-    }
-  ],
-  'tkb0002516': [
-    {
-      id: 'specify001',
-      from: '管理員',
-      subject: '給後端竹瑜的話',
-      body: '感謝你的付出，專案已順利完成 🎉',
-      startDate: '2026-06-29',
-      days: 30
-    }
-  ],
-  'tkb0002517': [
-    {
-      id: 'specify002',
-      from: '管理員',
-      subject: '給後端竹瑋的話',
-      body: '感謝你的付出，專案已順利完成 🎉',
-      startDate: '2026-06-29',
-      days: 30
-    }
-  ],
-  'tkb0005063': [
-    {
-      id: 'specify003',
-      from: '管理員',
-      subject: '給前端國廷的話',
-      body: '感謝你的付出，專案已順利完成 🎉',
-      startDate: '2026-06-29',
-      days: 30
-    }
-  ],
-  'tkb0003831': [
-    {
-      id: 'specify004',
-      from: '管理員',
-      subject: '給前端阿驚的話',
-      body: '感謝你的付出，專案已順利完成 🎉',
-      startDate: '2026-06-29',
-      days: 30
-    }
-  ],
-  'tkb0005530': [
-    {
-      id: 'specify005',
-      from: '管理員',
-      subject: '給前端芷妤的話',
-      body: '感謝你的付出，專案已順利完成 🎉',
-      startDate: '2026-06-29',
-      days: 30
-    }
-  ],
-}
-
-// 判斷信件是否在有效期內
-const isMessageVisible = (msg) => {
-  const start = new Date(msg.startDate)
-  start.setHours(0, 0, 0, 0)
-  const end = new Date(start)
-  end.setDate(end.getDate() + msg.days)
-  const now = new Date()
-  return now >= start && now < end
-}
+// 信件設定已集中至 src/utils/mailState.js，在此直接使用 import 的 mailConfig
 
 // 目前使用者名稱
 const currentUsername = ref('')
@@ -122,6 +32,8 @@ const markAsRead = (id) => {
     stored.push(id)
     localStorage.setItem('_mail_read', JSON.stringify(stored))
   }
+  // 標記已讀後同步更新 badge
+  refreshMailUnreadCount()
 }
 
 const unreadCount = computed(() =>

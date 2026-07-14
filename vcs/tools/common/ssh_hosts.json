@@ -1,0 +1,6 @@
+{
+  "_comment": "tkb 後端(VCS)遠端操作的機器對照表。sshToolUtil.sh 依 $1 查此表取得 host/user/key。新增機器（如 gallery）只需在此加一筆並把金鑰放到 ~/.ssh/，前端 /system/project 的 SSH 目標下拉會自動出現。注意：Jenkins 部署流程的環境 IP 是另一份（deploy.git config/vmIP.json），新增機器時兩邊都要加。",
+  "prod": { "host": "132.145.125.250", "user": "tkb0001662", "key": "/opt/vcs/tools/key/prod.pem", "label": "正式機" },
+  "dev":  { "host": "131.186.44.40",   "user": "tkb0001662", "key": "/opt/vcs/tools/key/dev.pem",  "label": "測試機" },
+  "gallery":  { "host": "122.147.5.150",   "user": "tkb0001662", "key": "/opt/vcs/tools/key/gallery.pem",  "label": "圖庫" }
+}

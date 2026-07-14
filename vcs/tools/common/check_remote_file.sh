@@ -11,7 +11,8 @@ CHECK_TYPE=$2   # file | dir  （刻意避開 TYPE，防止被 sshToolUtil.sh �
 CHECK_PATH=$3
 TOOLS_BASE="/opt/vcs/tools"
 
-[[ "$ENV" != "prod" && "$ENV" != "dev" ]] && { echo "error: invalid env $ENV"; exit 1; }
+source "${TOOLS_BASE}/common/ssh_env.sh"
+valid_ssh_env "$ENV" || { echo "error: invalid env $ENV (可用: $(list_ssh_envs))"; exit 1; }
 [[ -z "$CHECK_PATH" ]]                     && { echo "error: path required"; exit 1; }
 
 source "${TOOLS_BASE}/utils/sshToolUtil.sh" "$ENV"

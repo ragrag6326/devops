@@ -11,6 +11,7 @@ import LoginView from '../views/login/index.vue'
 import MonitorOverview from '../views/system/monitor/MonitorOverview.vue'
 import MonitorView from '../views/system/monitor/MonitorDetail.vue'
 import ProjectManage from '../views/system/project/index.vue'
+import DeployRegistryView from '../views/system/deploy-registry/index.vue'
 // log 分析
 import LogAnalysisView from '../views/system/log/index.vue'
 import LogQueryView from '../views/system/log_query/index.vue'
@@ -66,6 +67,12 @@ const router = createRouter({
           name: 'ProjectManage',
           component: ProjectManage,
           meta: { title: '專案管理' }
+        },
+        {
+          path: '/system/deploy-registry',
+          name: 'DeployRegistryView',
+          component: DeployRegistryView,
+          meta: { title: '部署對照表管理', keepAlive: true }
         }
       ]
     },

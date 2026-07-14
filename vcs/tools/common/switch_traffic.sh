@@ -3,7 +3,8 @@
 usage() { echo "Usage: $0 [prod|dev] [project] [blue|green] [header?]"; exit 99; }
 
 ENV=$1; PROJECT=$2; TARGET=$3; HEADER_MODE=$4
-[[ "$ENV"    != "prod" && "$ENV"    != "dev"   ]] && usage
+source /opt/vcs/tools/common/ssh_env.sh
+valid_ssh_env "$ENV" || usage
 [[ -z "$PROJECT" ]]                                && usage
 [[ "$TARGET" != "blue" && "$TARGET" != "green" ]] && usage
 

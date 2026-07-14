@@ -4,7 +4,8 @@
 usage() { echo "Usage: $0 [prod|dev] [project]"; exit 1; }
 
 ENV=$1; PROJECT=$2
-[[ "$ENV" != "prod" && "$ENV" != "dev" ]] && usage
+source /opt/vcs/tools/common/ssh_env.sh
+valid_ssh_env "$ENV" || usage
 [[ -z "$PROJECT" ]]                        && usage
 
 source /opt/vcs/tools/common/init.sh   # 解析 IMAGE_REPO、IMAGE_KEYWORD

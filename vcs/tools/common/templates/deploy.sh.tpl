@@ -57,16 +57,22 @@ fi
 # 讀取 .env 版本
 BLUE_VERSION=$(grep '^BLUE_VERSION=' "$ENV_FILE" | cut -d '=' -f2)
 GREEN_VERSION=$(grep '^GREEN_VERSION=' "$ENV_FILE" | cut -d '=' -f2)
-echo "🔵 Blue 版本:  ${BLUE_VERSION}"
+echo "🔵 Blue 更新前版本:  ${BLUE_VERSION}"
 echo "🟢 Green 版本: ${GREEN_VERSION}"
 
 # ---------------------------------------------------------
 # 部署 BLUE 正式線
 # ---------------------------------------------------------
 if [[ "$TARGET" == "blue" ]]; then
-    # 同步版本
-    if [ "$BLUE_VERSION" != "$GREEN_VERSION" ]; then
+    # 版本同步規則：
+    #   後端：Jenkins 只更新 GREEN_VERSION，blue 部署前先同步 BLUE=GREEN（正/備援永遠同版）
+    #   前端（PROD_IMAGE_REPO 以 frontend 開頭）：blue/green 是各自獨立的建置與版本序列，不同步
+    if [[ "${PROD_IMAGE_REPO}" == frontend* ]]; then
+        echo "⏭  前端專案：BLUE/GREEN 版本各自獨立，跳過版本同步"
+    elif [ "$BLUE_VERSION" != "$GREEN_VERSION" ]; then
         echo "🔁 將 BLUE 版本升級與 GREEN 一致"
+        BLUE_VERSION=$(grep '^BLUE_VERSION=' "$ENV_FILE" | cut -d '=' -f2)
+        echo "🔵 Blue 更新版本:  ${BLUE_VERSION}"
         sudo sed -i "s|BLUE_VERSION=.*|BLUE_VERSION=${GREEN_VERSION}|g" "$ENV_FILE"
     else
         echo "✔️  BLUE 版本已與 GREEN 相同，跳過同步"

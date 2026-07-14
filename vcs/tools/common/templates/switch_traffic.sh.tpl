@@ -11,6 +11,15 @@
 #          0  = 成功
 #          10 = 跳過（已在此線）
 #          1  = 失敗
+#
+#  切換依據（自動判斷）：
+#    - Blue/Green port 不同 → 以 127.0.0.1:port 切換（傳統模式）
+#    - Blue/Green port 相同 → 以容器名稱切換（nginx upstream 走
+#      docker network 直連容器，如 server gallery-backend-blue:8080）
+#      名稱取 PROD_BLUE_CONTAINERS / PROD_GREEN_CONTAINERS 第一個
+#
+#  nginx 在容器內時，config.sh 可設定（不可含 -it，非互動 ssh 會失敗）：
+#    PROD_NGINX_EXEC="docker exec nginx nginx"
 # =============================================================
 TARGET=$1       # blue | green
 HEADER_MODE=$2  # header | 空值（正式流量）
@@ -25,6 +34,8 @@ BLUE_PORT="${PROD_BLUE_CHECK_PORTS[0]}"
 GREEN_PORT="${PROD_GREEN_CHECK_PORTS[0]}"
 LIVE_UPSTREAM="${PROD_LIVE_UPSTREAM}"
 HEADER_UPSTREAM="${PROD_HEADER_UPSTREAM}"
+# nginx 指令（預設本機 nginx；容器內 nginx 設 PROD_NGINX_EXEC="docker exec nginx nginx"）
+NGINX_BIN="${PROD_NGINX_EXEC:-nginx}"
 # ─────────────────────────────────────────────────────────────
 
 usage() {
@@ -39,9 +50,24 @@ if [[ "$TARGET" != "blue" && "$TARGET" != "green" ]]; then
     usage; exit 99
 fi
 
-# 決定 active / down port
-[[ "$TARGET" == "blue" ]] && ACTIVE=$BLUE_PORT || ACTIVE=$GREEN_PORT
-[[ "$TARGET" == "blue" ]] && DOWN=$GREEN_PORT  || DOWN=$BLUE_PORT
+# ── 決定 upstream 內 active / down 的 server 位址 ──────────────
+# port 不同 → 127.0.0.1:port；port 相同 → 容器名稱:port（取 *_CONTAINERS 第一個）
+if [[ -n "$BLUE_PORT" && -n "$GREEN_PORT" && "$BLUE_PORT" != "$GREEN_PORT" ]]; then
+    BLUE_SERVER="127.0.0.1:${BLUE_PORT}"
+    GREEN_SERVER="127.0.0.1:${GREEN_PORT}"
+else
+    read -r BLUE_NAME _  <<< "${PROD_BLUE_CONTAINERS[*]}"
+    read -r GREEN_NAME _ <<< "${PROD_GREEN_CONTAINERS[*]}"
+    if [[ -z "$BLUE_NAME" || -z "$GREEN_NAME" ]]; then
+        echo "❌ Blue/Green port 相同時需以容器名稱切換，但 PROD_BLUE_CONTAINERS / PROD_GREEN_CONTAINERS 未設定"
+        exit 1
+    fi
+    BLUE_SERVER="${BLUE_NAME}:${BLUE_PORT}"
+    GREEN_SERVER="${GREEN_NAME}:${GREEN_PORT}"
+fi
+
+[[ "$TARGET" == "blue" ]] && ACTIVE_SERVER=$BLUE_SERVER || ACTIVE_SERVER=$GREEN_SERVER
+[[ "$TARGET" == "blue" ]] && DOWN_SERVER=$GREEN_SERVER  || DOWN_SERVER=$BLUE_SERVER
 
 # 決定要切換的 upstream block
 if [[ "$HEADER_MODE" == "header" ]]; then
@@ -55,7 +81,7 @@ fi
 # 已在此線則跳過
 BLOCK_TO_CHECK="${BLOCKS[0]}"
 if sudo sed -n "/upstream[[:space:]]\+${BLOCK_TO_CHECK}[[:space:]]*{/,/}/p" "$CONF" \
-   | grep -q "server 127.0.0.1:${ACTIVE}[[:space:]]*;"; then
+   | grep -q "server ${ACTIVE_SERVER}[[:space:]]*;"; then
     echo "[SKIP] ${TRAFFIC_LABEL} 流量已在 ${TARGET^^}，無須切換"
     exit 10
 fi
@@ -63,14 +89,14 @@ fi
 # 執行 upstream 切換
 for block in "${BLOCKS[@]}"; do
     sudo sed -i "/upstream[[:space:]]\+${block}[[:space:]]*{/,/}/ {
-        s|server 127.0.0.1:${DOWN}[[:space:]]*;|server 127.0.0.1:${DOWN} down;|;
-        s|server 127.0.0.1:${ACTIVE}[[:space:]]*down;|server 127.0.0.1:${ACTIVE};|;
+        s|server ${DOWN_SERVER}[[:space:]]*;|server ${DOWN_SERVER} down;|;
+        s|server ${ACTIVE_SERVER}[[:space:]]*down;|server ${ACTIVE_SERVER};|;
     }" "$CONF"
 done
 
-if sudo nginx -t 2>/dev/null; then
-    sudo nginx -s reload
-    echo "[OK] ${TRAFFIC_LABEL} 流量切換至 ${TARGET^^} (port: ${ACTIVE})"
+if sudo ${NGINX_BIN} -t 2>/dev/null; then
+    sudo ${NGINX_BIN} -s reload
+    echo "[OK] ${TRAFFIC_LABEL} 流量切換至 ${TARGET^^} (${ACTIVE_SERVER})"
     exit 0
 else
     echo "[ERROR] Nginx config test failed — 請手動確認 ${CONF}"
